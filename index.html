@@ -289,6 +289,8 @@ const DRIVE_SCOPE="https://www.googleapis.com/auth/drive.file";
 const PICKER_API_KEY="AIzaSyAUJs562U_kzsEVZNsHNJKDkH75txz-Jf4";
 const PICKER_APP_ID="446936050738";
 const FOLDER_NAME="Keuangan Keluarga";
+// Folder Google Drive utama yang dipilih pemilik keluarga.
+const TARGET_FOLDER_ID="1RRarzNRgBjMa9a3fcfO-RZ09Du8oa4zN";
 const DATA_FILE_NAME="data-keuangan.json";
 const RECEIPT_FOLDER_NAME="Bukti Transaksi";
 const DEFAULT_CATEGORIES=["Belanja dapur","Transportasi","Listrik","Air","Pendidikan","Kesehatan","Cicilan","Lain-lain"];
@@ -453,8 +455,8 @@ async function chooseFamilyDriveItem(parentId,kind,title){
   const view=new google.picker.DocsView(viewId)
    .setIncludeFolders(isFolder)
    .setSelectFolderEnabled(isFolder)
-   .setMode(google.picker.DocsViewMode.LIST)
-   .setParent(parentId);
+   .setMode(google.picker.DocsViewMode.LIST);
+  if(parentId)view.setParent(parentId);
   if(!isFolder)view.setMimeTypes("application/json");
   const picker=new google.picker.PickerBuilder()
    .setAppId(PICKER_APP_ID)
@@ -504,6 +506,25 @@ async function authorizeSharedFamilyItems(shared){
  }
 }
 
+async function authorizeOwnerConfiguredFolder(){
+ setLoginStatus("Pilih folder Google Drive tujuan yang sudah ditentukan...");
+ const chosenRoot=await chooseFamilyDriveItem(null,"folder","Pilih folder Keuangan Keluarga tujuan");
+ if(!chosenRoot)throw new Error("Pemilihan folder dibatalkan. Masuk kembali dan pilih folder tujuan.");
+ if(chosenRoot.id!==TARGET_FOLDER_ID)throw new Error("Folder yang dipilih tidak sesuai dengan ID folder tujuan yang ditetapkan.");
+ driveFolderId=chosenRoot.id;
+ setLoginStatus("Pilih file data-keuangan.json yang sudah berisi data lama...");
+ const chosenData=await chooseFamilyDriveItem(driveFolderId,"file","Pilih data-keuangan.json yang berisi data keluarga lama");
+ if(!chosenData)throw new Error("Database tidak dipilih. Data lama tidak diubah.");
+ if(chosenData.name!==DATA_FILE_NAME)throw new Error("Pilih file bernama data-keuangan.json. Data lama tidak diubah.");
+ dataFileId=chosenData.id;
+ receiptFolderId=null;
+ const chosenReceipt=await chooseFamilyDriveItem(driveFolderId,"folder","Pilih folder Bukti Transaksi (opsional)");
+ if(chosenReceipt){
+  if(chosenReceipt.name!==RECEIPT_FOLDER_NAME)throw new Error("Pilih folder Bukti Transaksi yang benar, atau batalkan.");
+  receiptFolderId=chosenReceipt.id;
+ }
+}
+
 async function initializeApp(){
  try{
   setLoginStatus("Membuka Google Drive...");
@@ -517,13 +538,10 @@ async function initializeApp(){
    await authorizeSharedFamilyItems(shared);
    await downloadDataFile();
   }else{
-   const folder=await findDriveFile(FOLDER_NAME,"application/vnd.google-apps.folder");
-   driveFolderId=folder?folder.id:await createDriveFolder(FOLDER_NAME);
-   const file=await findDriveFile(DATA_FILE_NAME,"application/json",driveFolderId);
-   if(file){dataFileId=file.id;await downloadDataFile()}
-   else{data=emptyData();normalizeData();await createDataFile()}
-   const receiptFolder=await findDriveFile(RECEIPT_FOLDER_NAME,"application/vnd.google-apps.folder",driveFolderId);
-   receiptFolderId=receiptFolder?receiptFolder.id:await createDriveFolder(RECEIPT_FOLDER_NAME,driveFolderId);
+   /* Folder tujuan ditetapkan secara eksplisit. Jangan membuat database baru
+      jika folder/file lama tidak ditemukan atau belum diotorisasi. */
+   await authorizeOwnerConfiguredFolder();
+   await downloadDataFile();
   }
   $("loginCard").classList.add("hidden");$("appArea").classList.remove("hidden");
   $("accountLabel").textContent=shared?"Google Drive keluarga bersama":"Google Drive terhubung";
