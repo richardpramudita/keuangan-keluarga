@@ -30,6 +30,14 @@ main{max-width:900px;margin:18px auto;padding:0 12px 35px}
 .stat{background:#ffffff12;padding:11px;border-radius:9px}
 .stat small{display:block;font-size:12px;margin-bottom:4px}
 .stat strong{font-size:15px}
+.top-finance{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:4px 0 14px}
+.top-finance-card{min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px}
+.top-finance-card small{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}
+.top-finance-card strong{display:block;font-size:clamp(15px,4vw,20px);overflow-wrap:anywhere}
+.summary-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0 4px}
+.summary-card{min-width:0;background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:13px}
+.summary-card span{display:block;color:var(--muted);font-size:13px;margin-bottom:5px}
+.summary-card strong{display:block;font-size:clamp(16px,4vw,21px);line-height:1.3;overflow-wrap:anywhere}
 nav{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px;position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0}
 button{border:1px solid transparent;border-radius:9px;padding:10px 12px;background:var(--primary);color:white;font-weight:bold;cursor:pointer}
 button:disabled{opacity:.5;cursor:wait}
@@ -82,11 +90,10 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
  .grid3{grid-template-columns:1fr 1fr}
  .item{align-items:flex-start;flex-wrap:wrap}
  .item-actions{width:100%;justify-content:flex-start}
- .balance h1{font-size:24px}
- .stats-four{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
- .stats-four .stat{padding:8px 4px}
- .stats-four .stat small{font-size:8px}
- .stats-four .stat strong{font-size:clamp(8px,2.5vw,11px)}
+ .top-finance{gap:7px}
+ .top-finance-card{padding:11px 9px}
+ .summary-cards{gap:7px}
+ .summary-card{padding:11px 9px}
  .card{padding:13px}
  .report-grid{grid-template-columns:1fr 1fr;gap:7px}
  .report-metric{padding:10px}
@@ -98,10 +105,6 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 </style>
 </head>
 <body>
-<header>
-<h2>💰 Keuangan Keluarga</h2>
-<p>Kelola pemasukan, pengeluaran, anggaran, tabungan, dan kewajiban keluarga</p>
-</header>
 <main>
 <section id="loginCard" class="card">
 <h3>🔐 Masuk dengan Google</h3>
@@ -113,13 +116,9 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 <div id="appArea" class="hidden">
 
 
-<section class="balance">
-<div class="stats stats-four">
-<div class="stat"><small>↑ Pemasukan</small><strong id="incomeTotal">Rp0</strong></div>
-<div class="stat"><small>↓ Pengeluaran</small><strong id="expenseTotal">Rp0</strong></div>
-<div class="stat"><small>▣ Anggaran</small><strong id="budgetTotal">Rp0</strong></div>
-<div class="stat"><small>✓ Sisa Saldo</small><strong id="balance">Rp0</strong></div>
-</div>
+<section class="top-finance">
+<div class="top-finance-card"><small>↑ Pemasukan</small><strong id="incomeTotal">Rp0</strong></div>
+<div class="top-finance-card"><small>↓ Pengeluaran</small><strong id="expenseTotal">Rp0</strong></div>
 </section>
 
 <nav class="no-print">
@@ -140,7 +139,10 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 <h3>📊 Ringkasan Bulanan</h3>
 <label for="dashMonth">Pilih bulan</label>
 <input type="month" id="dashMonth" onchange="renderAll()">
-<div id="dashboardSummary"></div>
+<div class="summary-cards">
+<div class="summary-card"><span>Sisa Anggaran</span><strong id="remainingBudget">Rp0</strong></div>
+<div class="summary-card"><span>Sisa Saldo</span><strong id="remainingBalance">Rp0</strong></div>
+</div>
 <div id="dashboardAlerts"></div>
 </div>
 <div class="card"><h3>📉 Pengeluaran per Kategori</h3><div id="categoryChart"></div></div>
@@ -708,11 +710,6 @@ function getRemainingDebtTotal(){
 function getRemainingSavingsTotal(){
  return data.savingsGoals.reduce((s,g)=>s+Math.max(0,(Number(g.target)||0)-(Number(g.saved)||0)),0);
 }
-function getAvailableBalance(m,income){
- // Sisa Saldo mengikuti rumus: seluruh pemasukan dikurangi total anggaran
- // kategori dan seluruh pengeluaran yang tercatat pada bulan tersebut.
- return income-getBudgetTotal(m)-getExpenseTotal(m);
-}
 function makeBar(label,budget,spent){
  budget=Number(budget)||0;spent=Number(spent)||0;
  const pct=budget>0?spent/budget*100:0;
@@ -969,11 +966,12 @@ function renderDebts(){
 /* DASHBOARD DAN GRAFIK */
 function renderDashboard(){
  const m=$("dashMonth").value||monthNow(),income=incomeForMonth(m),expense=getExpenseTotal(m),budget=getBudgetTotal(m);
- $("incomeTotal").textContent=rupiah(income);$("expenseTotal").textContent=rupiah(expense);
- const availableBalance=getAvailableBalance(m,income);
- $("balance").textContent=rupiah(availableBalance);
- $("budgetTotal").textContent=rupiah(budget);
- $("dashboardSummary").innerHTML=`<div class="muted">Sisa Saldo = pemasukan (${rupiah(income)}) − anggaran (${rupiah(budget)}) − pengeluaran (${rupiah(expense)}).</div>`;
+ const remainingBudget=budget-expense;
+ const remainingBalance=income-expense-remainingBudget;
+ $("incomeTotal").textContent=rupiah(income);
+ $("expenseTotal").textContent=rupiah(expense);
+ $("remainingBudget").textContent=rupiah(remainingBudget);
+ $("remainingBalance").textContent=rupiah(remainingBalance);
  const alerts=[];
  getAllCategories().forEach(c=>{
   const b=Number((data.budgets[m]||{})[c])||0,used=getCategoryExpense(m,c);
