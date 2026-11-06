@@ -62,7 +62,30 @@ label{font-size:13px;font-weight:bold;color:#cbd8e8}
 .chartbar span{display:block;height:100%;background:var(--primary)}
 hr{border:0;border-top:1px solid var(--border);margin:15px 0}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
-@media(max-width:520px){main{padding-left:9px;padding-right:9px}nav{grid-template-columns:repeat(4,1fr)}nav button{font-size:10px}.grid3{grid-template-columns:1fr 1fr}.item{align-items:flex-start}.balance h1{font-size:24px}}
+#monthlyReport,#annualReport{min-width:0;overflow-wrap:anywhere}
+.report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.report-metric{min-width:0;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2)}
+.report-metric small{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+.report-metric strong{display:block;font-size:clamp(14px,3.8vw,18px);overflow-wrap:anywhere}
+.report-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 2px;border-bottom:1px solid var(--border);min-width:0}
+.report-row:last-child{border-bottom:0}
+.report-row span{min-width:0;overflow-wrap:anywhere}
+.report-row strong{text-align:right;overflow-wrap:anywhere;white-space:normal}
+@media(max-width:520px){
+ main{padding-left:9px;padding-right:9px}
+ nav{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+ nav button{font-size:11px;padding:10px 2px;min-width:0}
+ .grid3{grid-template-columns:1fr 1fr}
+ .item{align-items:flex-start;flex-wrap:wrap}
+ .item-actions{width:100%;justify-content:flex-start}
+ .balance h1{font-size:24px}
+ .card{padding:13px}
+ .report-grid{grid-template-columns:1fr 1fr;gap:7px}
+ .report-metric{padding:10px}
+ #monthlyReport .status{line-height:1.4}
+ #annualReport .report-row{gap:7px}
+ #annualReport .report-row strong{max-width:48%;font-size:13px}
+}
 @media print{body{background:white;color:#111}header,nav,#loginCard,.no-print,button{display:none!important}main{max-width:none;margin:0;padding:0}.card{background:white;color:#111;border:1px solid #ccc;break-inside:avoid}.muted{color:#555}.item{border-color:#ddd}}
 </style>
 </head>
@@ -672,10 +695,20 @@ function incomeForMonth(m){
 
 /* HITUNGAN DASAR */
 function getMonthExpenses(m){return data.expenses.filter(e=>String(e.date).startsWith(m))}
+function addLinkedExpense({sourceType,sourceId,date,category,amount,note}){
+ const id=makeId();
+ data.expenses.push({id,date,category,amount:Number(amount)||0,note,sourceType,sourceId,accountId:"",createdAt:new Date().toISOString()});
+ return id;
+}
+function removeLinkedExpense(sourceType,sourceId,datePrefix){
+ data.expenses=data.expenses.filter(e=>!(e.sourceType===sourceType&&e.sourceId===sourceId&&(!datePrefix||String(e.date).startsWith(datePrefix))));
+}
 function getExpenseTotal(m){return getMonthExpenses(m).reduce((s,e)=>s+(Number(e.amount)||0),0)}
 function getAllCategories(){return [...new Set([...data.categories,...data.expenses.map(e=>e.category)])]}
 function getCategoryExpense(m,c){return getMonthExpenses(m).filter(e=>e.category===c).reduce((s,e)=>s+(Number(e.amount)||0),0)}
 function getBudgetTotal(m){return getAllCategories().reduce((s,c)=>s+(Number((data.budgets[m]||{})[c])||0),0)}
+// Anggaran terpakai adalah ringkasan/pembatas transaksi yang sudah tercatat,
+// bukan pengeluaran kedua; menjumlahkannya lagi akan menggandakan saldo terpotong.
 function makeBar(label,budget,spent){
  budget=Number(budget)||0;spent=Number(spent)||0;
  const pct=budget>0?spent/budget*100:0;
@@ -874,11 +907,17 @@ async function addBill(event){
 }
 async function toggleBillPaid(id){
  const bill=data.bills.find(x=>x.id===id);if(!bill)return;
- const m=monthNow();bill.paidMonths=Array.isArray(bill.paidMonths)?bill.paidMonths:[];
- if(bill.paidMonths.includes(m))bill.paidMonths=bill.paidMonths.filter(x=>x!==m);
- else bill.paidMonths.push(m);
- try{await saveToDrive();renderAll();setStatus("Status tagihan diperbarui.","success")}
- catch(e){setStatus(e.message,"error")}
+ const old=cloneData(),m=monthNow();bill.paidMonths=Array.isArray(bill.paidMonths)?bill.paidMonths:[];
+ if(bill.paidMonths.includes(m)){
+  bill.paidMonths=bill.paidMonths.filter(x=>x!==m);
+  removeLinkedExpense("bill",id,m);
+ }else{
+  bill.paidMonths.push(m);
+  const day=String(Math.min(Number(bill.day)||1, new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),0).getDate())).padStart(2,"0");
+  addLinkedExpense({sourceType:"bill",sourceId:id,date:m+"-"+day,category:"Tagihan",amount:bill.amount,note:"Pembayaran tagihan: "+bill.name});
+ }
+ try{await saveToDrive();renderAll();setStatus("Pembayaran tagihan dicatat sebagai pengeluaran.","success")}
+ catch(e){data=old;renderAll();setStatus(e.message,"error")}
 }
 async function deleteBill(id){
  if(!confirm("Hapus tagihan ini?"))return;
@@ -914,7 +953,8 @@ async function addGoalContribution(id){
  const n=Number(prompt("Masukkan nominal tambahan tabungan (Rp):"));
  if(!Number.isFinite(n)||n<=0)return;
  const old=cloneData();goal.saved=(Number(goal.saved)||0)+n;
- try{await saveToDrive();renderAll();setStatus("Tabungan berhasil diperbarui.","success")}
+ addLinkedExpense({sourceType:"saving",sourceId:id,date:dateNow(),category:"Tabungan",amount:n,note:"Setoran tabungan: "+goal.name});
+ try{await saveToDrive();renderAll();setStatus("Setoran tabungan dicatat sebagai pengeluaran.","success")}
  catch(e){data=old;renderAll();setStatus(e.message,"error")}
 }
 async function deleteGoal(id){
@@ -948,7 +988,10 @@ async function repayDebt(id){
  if(!Number.isFinite(n)||n<=0)return;
  if(n>remaining){alert("Nominal melebihi sisa kewajiban.");return}
  const old=cloneData();d.paid=(Number(d.paid)||0)+n;
- try{await saveToDrive();renderAll();setStatus("Pembayaran dicatat.","success")}
+ if(d.type==="payable"){
+  addLinkedExpense({sourceType:"debt",sourceId:id,date:dateNow(),category:"Pembayaran Utang",amount:n,note:"Pembayaran utang kepada: "+d.person});
+ }
+ try{await saveToDrive();renderAll();setStatus(d.type==="payable"?"Pembayaran utang dicatat sebagai pengeluaran.":"Pembayaran piutang dicatat.","success")}
  catch(e){data=old;renderAll();setStatus(e.message,"error")}
 }
 async function deleteDebt(id){
@@ -992,17 +1035,23 @@ function renderDashboard(){
 function renderReports(){
  const m=$("reportMonth").value||monthNow(),list=getMonthExpenses(m),income=incomeForMonth(m),total=getExpenseTotal(m);
  const groups={};list.forEach(e=>groups[e.category]=(groups[e.category]||0)+Number(e.amount||0));
- $("monthlyReport").innerHTML=`<div class="status">Rekap ${escapeHTML(monthName(m))} · ${list.length} transaksi</div>
- <div class="grid2"><div class="box">Pemasukan<strong>${rupiah(income)}</strong></div><div class="box">Pengeluaran<strong>${rupiah(total)}</strong></div></div>
- <div class="box">Selisih<strong>${rupiah(income-total)}</strong></div>
- ${Object.entries(groups).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div class="item"><span>${escapeHTML(c)}</span><strong>${rupiah(v)}</strong></div>`).join("")||'<div class="empty">Belum ada pengeluaran.</div>'}`;
+ $("monthlyReport").innerHTML=`<div class="status">Rekap ${escapeHTML(monthName(m))} · ${list.length} catatan pengeluaran</div>
+ <div class="report-grid">
+  <div class="report-metric"><small>Pemasukan</small><strong>${rupiah(income)}</strong></div>
+  <div class="report-metric"><small>Total pengeluaran</small><strong>${rupiah(total)}</strong></div>
+  <div class="report-metric"><small>Saldo bersih</small><strong>${rupiah(income-total)}</strong></div>
+  <div class="report-metric"><small>Anggaran terpakai</small><strong>${rupiah(total)}</strong></div>
+ </div>
+ <p class="muted">Pengeluaran mencakup transaksi, tagihan yang ditandai lunas, setoran tabungan, dan pembayaran utang. Anggaran terpakai merupakan ringkasan transaksi yang sama, tidak dihitung dua kali.</p>
+ <h4>Rincian pengeluaran</h4>
+ ${Object.entries(groups).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div class="report-row"><span>${escapeHTML(c)}</span><strong>${rupiah(v)}</strong></div>`).join("")||'<div class="empty">Belum ada pengeluaran.</div>'}`;
  const year=Number($("reportYear").value)||new Date().getFullYear();
  const rows=Array.from({length:12},(_,i)=>{
   const mm=String(i+1).padStart(2,"0"),key=year+"-"+mm;
   return {month:key,income:incomeForMonth(key),expense:getExpenseTotal(key)};
  });
- $("annualReport").innerHTML=rows.map(r=>`<div class="item"><span>${escapeHTML(monthName(r.month))}<div class="muted">Masuk ${rupiah(r.income)}</div></span><strong>${rupiah(r.expense)}</strong></div>`).join("")+
- `<hr><strong>Total pemasukan: ${rupiah(rows.reduce((s,x)=>s+x.income,0))}</strong><br><strong>Total pengeluaran: ${rupiah(rows.reduce((s,x)=>s+x.expense,0))}</strong>`;
+ $("annualReport").innerHTML=rows.map(r=>`<div class="report-row"><span><strong>${escapeHTML(monthName(r.month))}</strong><div class="muted">Pemasukan ${rupiah(r.income)}</div></span><strong>${rupiah(r.expense)}</strong></div>`).join("")+
+ `<div class="box"><div class="report-row"><span>Total pemasukan</span><strong>${rupiah(rows.reduce((s,x)=>s+x.income,0))}</strong></div><div class="report-row"><span>Total pengeluaran</span><strong>${rupiah(rows.reduce((s,x)=>s+x.expense,0))}</strong></div><div class="report-row"><span>Saldo bersih tahunan</span><strong>${rupiah(rows.reduce((s,x)=>s+x.income-x.expense,0))}</strong></div></div>`;
 }
 function csvCell(v){return '"'+String(v??"").replace(/"/g,'""')+'"'}
 function exportCSV(){
