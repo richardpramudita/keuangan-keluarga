@@ -22,7 +22,11 @@ main{max-width:900px;margin:18px auto;padding:0 12px 35px}
 .balance{background:linear-gradient(135deg,#173b60,#172b49);border:1px solid #31577e;border-radius:15px;padding:18px;margin-bottom:14px}
 .balance h1{font-size:28px;margin:7px 0 14px;overflow-wrap:anywhere}
 .balance small{color:#c0d5eb}
-.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.stats-four{grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.stats-four .stat{min-width:0;padding:9px 6px}
+.stats-four .stat small{font-size:clamp(8px,2.5vw,12px);white-space:nowrap}
+.stats-four .stat strong{display:block;font-size:clamp(9px,2.7vw,15px);overflow-wrap:anywhere;line-height:1.25}
 .stat{background:#ffffff12;padding:11px;border-radius:9px}
 .stat small{display:block;font-size:12px;margin-bottom:4px}
 .stat strong{font-size:15px}
@@ -79,6 +83,10 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
  .item{align-items:flex-start;flex-wrap:wrap}
  .item-actions{width:100%;justify-content:flex-start}
  .balance h1{font-size:24px}
+ .stats-four{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+ .stats-four .stat{padding:8px 4px}
+ .stats-four .stat small{font-size:8px}
+ .stats-four .stat strong{font-size:clamp(8px,2.5vw,11px)}
  .card{padding:13px}
  .report-grid{grid-template-columns:1fr 1fr;gap:7px}
  .report-metric{padding:10px}
@@ -106,11 +114,11 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 
 
 <section class="balance">
-<small>Sisa Saldo tersedia</small>
-<h1 id="balance">Rp0</h1>
-<div class="stats">
+<div class="stats stats-four">
 <div class="stat"><small>↑ Pemasukan</small><strong id="incomeTotal">Rp0</strong></div>
 <div class="stat"><small>↓ Pengeluaran</small><strong id="expenseTotal">Rp0</strong></div>
+<div class="stat"><small>▣ Anggaran</small><strong id="budgetTotal">Rp0</strong></div>
+<div class="stat"><small>✓ Sisa Saldo</small><strong id="balance">Rp0</strong></div>
 </div>
 </section>
 
@@ -701,9 +709,9 @@ function getRemainingSavingsTotal(){
  return data.savingsGoals.reduce((s,g)=>s+Math.max(0,(Number(g.target)||0)-(Number(g.saved)||0)),0);
 }
 function getAvailableBalance(m,income){
- // Pengeluaran yang sudah tercatat tidak dikurangkan lagi di sini: alokasi
- // anggaran, tagihan belum lunas, sisa utang, dan target tabungan dihitung terpisah.
- return income-getBudgetTotal(m)-getUnpaidBillTotal(m)-getRemainingDebtTotal()-getRemainingSavingsTotal();
+ // Sisa Saldo mengikuti rumus: seluruh pemasukan dikurangi total anggaran
+ // kategori dan seluruh pengeluaran yang tercatat pada bulan tersebut.
+ return income-getBudgetTotal(m)-getExpenseTotal(m);
 }
 function makeBar(label,budget,spent){
  budget=Number(budget)||0;spent=Number(spent)||0;
@@ -964,10 +972,8 @@ function renderDashboard(){
  $("incomeTotal").textContent=rupiah(income);$("expenseTotal").textContent=rupiah(expense);
  const availableBalance=getAvailableBalance(m,income);
  $("balance").textContent=rupiah(availableBalance);
- const unpaidBills=getUnpaidBillTotal(m),remainingDebt=getRemainingDebtTotal(),remainingSavings=getRemainingSavingsTotal();
- $("dashboardSummary").innerHTML=`
- <div class="grid2"><div class="box"><div class="muted">Anggaran (sisa dana tersedia)</div><strong>${rupiah(budget-expense)}</strong><div class="muted">Total anggaran kategori dikurangi pengeluaran yang tercatat.</div></div>
- <div class="box"><div class="muted">Sisa Saldo</div><strong>${rupiah(availableBalance)}</strong><div class="muted">Pemasukan dikurangi anggaran kategori (${rupiah(budget)}), tagihan belum lunas (${rupiah(unpaidBills)}), sisa utang (${rupiah(remainingDebt)}), dan sisa target tabungan (${rupiah(remainingSavings)}).</div></div></div>`;
+ $("budgetTotal").textContent=rupiah(budget);
+ $("dashboardSummary").innerHTML=`<div class="muted">Sisa Saldo = pemasukan (${rupiah(income)}) − anggaran (${rupiah(budget)}) − pengeluaran (${rupiah(expense)}).</div>`;
  const alerts=[];
  getAllCategories().forEach(c=>{
   const b=Number((data.budgets[m]||{})[c])||0,used=getCategoryExpense(m,c);
