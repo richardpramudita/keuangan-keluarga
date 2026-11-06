@@ -61,6 +61,29 @@ label{font-size:13px;font-weight:bold;color:#cbd8e8}
 .chartbar span{display:block;height:100%;background:var(--primary)}
 hr{border:0;border-top:1px solid var(--border);margin:15px 0}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
+
+.report-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+.report-metric{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:13px;min-width:0}
+.report-metric small{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}
+.report-metric strong{display:block;font-size:clamp(14px,2.5vw,19px);overflow-wrap:anywhere}
+.report-metric.net{border-color:#31577e}
+.report-section-title{font-size:14px;font-weight:700;margin:18px 0 8px}
+.report-category{padding:10px 0;border-bottom:1px solid var(--border)}
+.report-category:last-child{border-bottom:0}
+.report-category-head{display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:13px}
+.report-category-head strong{white-space:nowrap}
+.report-track{height:8px;background:#34445b;border-radius:20px;overflow:hidden;margin-top:7px}
+.report-track span{display:block;height:100%;background:var(--primary);border-radius:20px}
+.report-table-wrap{overflow-x:auto}
+.report-table{width:100%;border-collapse:collapse;font-size:13px;min-width:440px}
+.report-table th,.report-table td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+.report-table th:first-child,.report-table td:first-child{text-align:left}
+.report-table th{color:var(--muted);font-weight:600}
+.report-table tfoot td{font-weight:700;border-top:2px solid var(--border)}
+.report-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,.7fr);gap:12px;align-items:end}
+.report-controls label{display:block}
+@media(max-width:520px){.report-summary{grid-template-columns:1fr}.report-controls{grid-template-columns:1fr}}
+
 @media(max-width:520px){main{padding-left:9px;padding-right:9px}nav{grid-template-columns:repeat(4,1fr)}nav button{font-size:10px}.grid3{grid-template-columns:1fr 1fr}.item{align-items:flex-start}.balance h1{font-size:24px}}
 @media print{body{background:white;color:#111}header,nav,#loginCard,.no-print,button{display:none!important}main{max-width:none;margin:0;padding:0}.card{background:white;color:#111;border:1px solid #ccc;break-inside:avoid}.muted{color:#555}.item{border-color:#ddd}}
 </style>
@@ -84,18 +107,6 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 <button class="secondary small" onclick="logoutGoogle()">Keluar</button>
 </div>
 <div id="appStatus" class="status">Terhubung.</div>
-<section class="card no-print" id="familySharingCard">
-<h3>👨‍👩‍👧 Akses akun istri</h3>
-<p class="muted">Bagikan folder data keluarga ke akun Google istri. Setelah menerima undangan, istri membuka tautan aplikasi bersama di perangkatnya dan masuk dengan akun Google yang diundang.</p>
-<label for="wifeGoogleEmail">Email Google istri</label>
-<input type="email" id="wifeGoogleEmail" value="oktawidiarini@gmail.com" placeholder="nama@gmail.com" autocomplete="email">
-<button class="primary" id="shareWifeButton" onclick="shareFolderWithWife(event)">Bagikan akses edit ke istri</button>
-<label for="familyShareLink">Tautan aplikasi untuk istri</label>
-<input id="familyShareLink" readonly placeholder="Tautan muncul setelah akses dibagikan">
-<button class="secondary primary" type="button" onclick="copyFamilyShareLink()">Salin tautan aplikasi</button>
-<p class="muted">Akun istri mendapat akses Editor ke folder data keluarga. Jangan bagikan tautan ini kepada orang lain.</p>
-</section>
-
 <section class="balance">
 <small>Saldo bersih keluarga bulan ini</small>
 <h1 id="balance">Rp0</h1>
@@ -250,15 +261,23 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 
 <section id="reports" class="hidden">
 <div class="card">
-<h3>📈 Laporan Bulanan dan Tahunan</h3>
-<label for="reportMonth">Pilih bulan</label><input type="month" id="reportMonth">
+<h3>📈 Laporan Bulanan</h3>
+<div class="report-controls">
+<div><label for="reportMonth">Pilih bulan</label><input type="month" id="reportMonth"></div>
+<div class="muted">Ringkasan transaksi keluarga</div>
+</div>
 <div id="monthlyReport"></div>
-<button class="secondary primary no-print" onclick="exportCSV()">Unduh CSV / Excel</button>
-<button class="secondary primary no-print" style="margin-top:8px" onclick="window.print()">Cetak / Simpan PDF</button>
+<div class="no-print" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">
+<button class="secondary" onclick="exportCSV()">Unduh CSV / Excel</button>
+<button class="secondary" onclick="window.print()">Cetak / Simpan PDF</button>
+</div>
 </div>
 <div class="card">
 <h3>📅 Rekap Tahunan</h3>
-<label for="reportYear">Tahun</label><input type="number" id="reportYear" min="2000" max="2100">
+<div class="report-controls">
+<div><label for="reportYear">Tahun</label><input type="number" id="reportYear" min="2000" max="2100"></div>
+<div class="muted">Perbandingan pemasukan dan pengeluaran</div>
+</div>
 <div id="annualReport"></div>
 </div>
 </section>
@@ -327,7 +346,8 @@ async function loginGoogle(){
     accessToken=r.access_token;await initializeApp()
    }
   });
-  tokenClient.requestAccessToken({prompt:"select_account"});
+  /* Gunakan sesi akun Google yang sedang aktif tanpa selalu memaksa pemilih akun. */
+  tokenClient.requestAccessToken({prompt:""});
  }catch(e){b.disabled=false;setLoginStatus(e.message,"error")}
 }
 function logoutGoogle(){
@@ -849,19 +869,38 @@ function renderDashboard(){
 
 /* LAPORAN BULANAN, TAHUNAN, EKSPOR */
 function renderReports(){
- const m=$("reportMonth").value||monthNow(),list=getMonthExpenses(m),income=incomeForMonth(m),total=getExpenseTotal(m);
+ const m=$("reportMonth").value||monthNow(),list=getMonthExpenses(m),income=incomeForMonth(m),total=getExpenseTotal(m),net=income-total;
  const groups={};list.forEach(e=>groups[e.category]=(groups[e.category]||0)+Number(e.amount||0));
- $("monthlyReport").innerHTML=`<div class="status">Rekap ${escapeHTML(monthName(m))} · ${list.length} transaksi</div>
- <div class="grid2"><div class="box">Pemasukan<strong>${rupiah(income)}</strong></div><div class="box">Pengeluaran<strong>${rupiah(total)}</strong></div></div>
- <div class="box">Selisih<strong>${rupiah(income-total)}</strong></div>
- ${Object.entries(groups).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div class="item"><span>${escapeHTML(c)}</span><strong>${rupiah(v)}</strong></div>`).join("")||'<div class="empty">Belum ada pengeluaran.</div>'}`;
+ const sorted=Object.entries(groups).sort((a,b)=>b[1]-a[1]),maxCategory=Math.max(1,...sorted.map(x=>x[1]));
+ $("monthlyReport").innerHTML=`
+ <div class="status">📆 ${escapeHTML(monthName(m))} · ${list.length} transaksi pengeluaran</div>
+ <div class="report-summary">
+  <div class="report-metric"><small>Total pemasukan</small><strong>${rupiah(income)}</strong></div>
+  <div class="report-metric"><small>Total pengeluaran</small><strong>${rupiah(total)}</strong></div>
+  <div class="report-metric net"><small>Selisih</small><strong>${rupiah(net)}</strong></div>
+ </div>
+ <div class="report-section-title">Pengeluaran per kategori</div>
+ ${sorted.map(([c,v])=>`<div class="report-category">
+  <div class="report-category-head"><span>${escapeHTML(c)}</span><strong>${rupiah(v)}</strong></div>
+  <div class="report-track"><span style="width:${Math.max(0,Math.min(100,v/maxCategory*100))}%"></span></div>
+ </div>`).join("")||'<div class="empty">Belum ada pengeluaran pada bulan ini.</div>'}`;
  const year=Number($("reportYear").value)||new Date().getFullYear();
  const rows=Array.from({length:12},(_,i)=>{
   const mm=String(i+1).padStart(2,"0"),key=year+"-"+mm;
-  return {month:key,income:incomeForMonth(key),expense:getExpenseTotal(key)};
+  return {month:key,label:new Date(year,i,1).toLocaleDateString("id-ID",{month:"short"}),income:incomeForMonth(key),expense:getExpenseTotal(key)};
  });
- $("annualReport").innerHTML=rows.map(r=>`<div class="item"><span>${escapeHTML(monthName(r.month))}<div class="muted">Masuk ${rupiah(r.income)}</div></span><strong>${rupiah(r.expense)}</strong></div>`).join("")+
- `<hr><strong>Total pemasukan: ${rupiah(rows.reduce((s,x)=>s+x.income,0))}</strong><br><strong>Total pengeluaran: ${rupiah(rows.reduce((s,x)=>s+x.expense,0))}</strong>`;
+ const sumIncome=rows.reduce((s,x)=>s+x.income,0),sumExpense=rows.reduce((s,x)=>s+x.expense,0);
+ $("annualReport").innerHTML=`
+ <div class="report-summary">
+  <div class="report-metric"><small>Pemasukan setahun</small><strong>${rupiah(sumIncome)}</strong></div>
+  <div class="report-metric"><small>Pengeluaran setahun</small><strong>${rupiah(sumExpense)}</strong></div>
+  <div class="report-metric net"><small>Selisih setahun</small><strong>${rupiah(sumIncome-sumExpense)}</strong></div>
+ </div>
+ <div class="report-table-wrap"><table class="report-table">
+ <thead><tr><th>Bulan</th><th>Pemasukan</th><th>Pengeluaran</th></tr></thead>
+ <tbody>${rows.map(r=>`<tr><td>${escapeHTML(r.label)}</td><td>${rupiah(r.income)}</td><td>${rupiah(r.expense)}</td></tr>`).join("")}</tbody>
+ <tfoot><tr><td>Total</td><td>${rupiah(sumIncome)}</td><td>${rupiah(sumExpense)}</td></tr></tfoot>
+ </table></div>`;
 }
 function csvCell(v){return '"'+String(v??"").replace(/"/g,'""')+'"'}
 function exportCSV(){
