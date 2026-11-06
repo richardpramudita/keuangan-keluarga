@@ -1004,6 +1004,9 @@ async function restoreJSON(event){
 
 /* RENDER SEMUA HALAMAN */
 function renderAll(){
+ /* Pastikan dropdown kategori pengeluaran selalu diisi dari data keluarga.
+    Pertahankan pilihan aktif saat halaman dirender ulang. */
+ fillExpenseCategories($("expenseCategory").value);
  renderDashboard();renderBudget();renderTransactions();renderCategoryList();
  renderAccounts();renderBills();renderUpcomingBills();renderGoals();renderDebts();renderReports();
 }
