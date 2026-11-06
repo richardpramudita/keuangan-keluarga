@@ -484,29 +484,56 @@ async function chooseFamilyDriveItem(parentId,kind,title){
   picker.setVisible(true);
  });
 }
+/* Simpan ID pilihan Drive di browser perangkat ini. Token OAuth tidak disimpan. */
+const DRIVE_PREFS_KEY="keuanganKeluargaDrivePrefsV1";
+function readDrivePrefs(){try{return JSON.parse(localStorage.getItem(DRIVE_PREFS_KEY)||"{}")}catch(e){return {}}}
+function writeDrivePrefs(prefs){try{localStorage.setItem(DRIVE_PREFS_KEY,JSON.stringify(prefs))}catch(e){console.warn("Preferensi Drive tidak dapat disimpan:",e.message)}}
+function clearDrivePrefs(key){const p=readDrivePrefs();delete p[key];writeDrivePrefs(p)}
+function sharedPrefsKey(shared){return "family:"+shared.folderId+":"+shared.dataFileId}
 async function authorizeSharedFamilyItems(shared){
+ const key=sharedPrefsKey(shared),prefs=readDrivePrefs(),saved=prefs[key];
+ driveFolderId=shared.folderId;dataFileId=shared.dataFileId;receiptFolderId=null;
+ if(saved&&saved.folderId===shared.folderId&&saved.dataFileId===shared.dataFileId){
+  try{
+   setLoginStatus("Menggunakan pilihan Google Drive keluarga yang tersimpan...");
+   if(shared.receiptFolderId&&saved.receiptFolderId===shared.receiptFolderId)receiptFolderId=saved.receiptFolderId;
+   await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(dataFileId)+"?fields=id,name,mimeType");
+   if(receiptFolderId)await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(receiptFolderId)+"?fields=id,name,mimeType");
+   return;
+  }catch(e){console.warn("Pilihan Drive tersimpan tidak dapat dipakai, minta otorisasi ulang:",e.message);clearDrivePrefs(key)}
+ }
  setLoginStatus("Pilih database keluarga di Google Picker...");
  const chosenData=await chooseFamilyDriveItem(shared.folderId,"file","Pilih file data-keuangan.json milik keluarga");
  if(!chosenData)throw new Error("Pemilihan database dibatalkan. Masuk kembali dan pilih file data keluarga.");
  if(chosenData.id!==shared.dataFileId)throw new Error("File yang dipilih bukan database keluarga dari tautan pemilik. Pilih data-keuangan.json yang benar.");
  if(chosenData.name&&chosenData.name!==DATA_FILE_NAME)throw new Error("File yang dipilih bukan data-keuangan.json.");
  dataFileId=chosenData.id;
-
- receiptFolderId=null;
  if(shared.receiptFolderId){
   setLoginStatus("Pilih folder Bukti Transaksi keluarga di Google Picker...");
   const chosenFolder=await chooseFamilyDriveItem(shared.folderId,"folder","Pilih folder Bukti Transaksi keluarga");
-  if(chosenFolder&&chosenFolder.id===shared.receiptFolderId){
-   receiptFolderId=chosenFolder.id;
-  }else if(chosenFolder){
-   throw new Error("Folder yang dipilih bukan folder Bukti Transaksi keluarga dari tautan pemilik.");
-  }else{
-   setLoginStatus("Database dipilih. Folder bukti transaksi belum diotorisasi; transaksi dan sinkronisasi data tetap tersedia.");
-  }
+  if(chosenFolder&&chosenFolder.id===shared.receiptFolderId)receiptFolderId=chosenFolder.id;
+  else if(chosenFolder)throw new Error("Folder yang dipilih bukan folder Bukti Transaksi keluarga dari tautan pemilik.");
+  else receiptFolderId=null;
  }
+ writeDrivePrefs({...readDrivePrefs(),[key]:{folderId:driveFolderId,dataFileId,receiptFolderId:receiptFolderId||""}});
 }
 
 async function authorizeOwnerConfiguredFolder(){
+ const key="owner:"+TARGET_FOLDER_ID,prefs=readDrivePrefs(),saved=prefs[key];
+ driveFolderId=TARGET_FOLDER_ID;
+ if(saved&&saved.folderId===TARGET_FOLDER_ID&&saved.dataFileId){
+  try{
+   setLoginStatus("Menggunakan pilihan Google Drive yang tersimpan...");
+   dataFileId=saved.dataFileId;receiptFolderId=saved.receiptFolderId||null;
+   const meta=await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(dataFileId)+"?fields=id,name,mimeType,parents");
+   if(meta.name!==DATA_FILE_NAME)throw new Error("File tersimpan bukan data-keuangan.json.");
+   if(receiptFolderId){
+    const folder=await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(receiptFolderId)+"?fields=id,name,mimeType");
+    if(folder.name!==RECEIPT_FOLDER_NAME)receiptFolderId=null;
+   }
+   return;
+  }catch(e){console.warn("Pilihan Drive tersimpan tidak dapat dipakai, minta pemilihan ulang:",e.message);clearDrivePrefs(key)}
+ }
  setLoginStatus("Pilih folder Google Drive tujuan yang sudah ditentukan...");
  const chosenRoot=await chooseFamilyDriveItem(null,"folder","Pilih folder Keuangan Keluarga tujuan");
  if(!chosenRoot)throw new Error("Pemilihan folder dibatalkan. Masuk kembali dan pilih folder tujuan.");
@@ -516,13 +543,13 @@ async function authorizeOwnerConfiguredFolder(){
  const chosenData=await chooseFamilyDriveItem(driveFolderId,"file","Pilih data-keuangan.json yang berisi data keluarga lama");
  if(!chosenData)throw new Error("Database tidak dipilih. Data lama tidak diubah.");
  if(chosenData.name!==DATA_FILE_NAME)throw new Error("Pilih file bernama data-keuangan.json. Data lama tidak diubah.");
- dataFileId=chosenData.id;
- receiptFolderId=null;
+ dataFileId=chosenData.id;receiptFolderId=null;
  const chosenReceipt=await chooseFamilyDriveItem(driveFolderId,"folder","Pilih folder Bukti Transaksi (opsional)");
  if(chosenReceipt){
   if(chosenReceipt.name!==RECEIPT_FOLDER_NAME)throw new Error("Pilih folder Bukti Transaksi yang benar, atau batalkan.");
   receiptFolderId=chosenReceipt.id;
  }
+ writeDrivePrefs({...readDrivePrefs(),[key]:{folderId:driveFolderId,dataFileId,receiptFolderId:receiptFolderId||""}});
 }
 
 async function initializeApp(){
