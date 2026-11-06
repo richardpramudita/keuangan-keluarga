@@ -80,22 +80,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 </section>
 
 <div id="appArea" class="hidden">
-<div class="card top-actions no-print">
-<div><strong id="accountLabel">Google Drive terhubung</strong><div class="muted">Data keluarga bersama</div></div>
-<button class="secondary small" onclick="logoutGoogle()">Keluar</button>
-</div>
-<div id="appStatus" class="status">Terhubung.</div>
-<section class="card no-print" id="familySharingCard">
-<h3>👨‍👩‍👧 Akses akun istri</h3>
-<p class="muted">Bagikan folder data keluarga ke akun Google istri. Setelah menerima undangan, istri membuka tautan aplikasi bersama di perangkatnya dan masuk dengan akun Google yang diundang.</p>
-<label for="wifeGoogleEmail">Email Google istri</label>
-<input type="email" id="wifeGoogleEmail" value="oktawidiarini@gmail.com" placeholder="nama@gmail.com" autocomplete="email">
-<button class="primary" id="shareWifeButton" onclick="shareFolderWithWife(event)">Bagikan akses edit ke istri</button>
-<label for="familyShareLink">Tautan aplikasi untuk istri</label>
-<input id="familyShareLink" readonly placeholder="Tautan muncul setelah akses dibagikan">
-<button class="secondary primary" type="button" onclick="copyFamilyShareLink()">Salin tautan aplikasi</button>
-<p class="muted">Akun istri mendapat akses Editor ke folder data keluarga. Jangan bagikan tautan ini kepada orang lain.</p>
-</section>
+
 
 <section class="balance">
 <small>Saldo bersih keluarga bulan ini</small>
@@ -117,6 +102,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 <button data-page="debts" onclick="showPage('debts',this)">Utang</button>
 <button data-page="reports" onclick="showPage('reports',this)">Laporan</button>
 <button data-page="backup" onclick="showPage('backup',this)">Backup</button>
+<button data-page="settings" onclick="showPage('settings',this)">Pengaturan</button>
 </nav>
 
 <section id="dashboard">
@@ -273,6 +259,32 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 <label for="restoreFile">Pulihkan dari file backup JSON</label><input type="file" id="restoreFile" accept="application/json,.json">
 <button class="danger primary" onclick="restoreJSON(event)">Pulihkan Data dari Backup</button>
 <p class="muted">Pemulihan akan mengganti data di Google Drive dengan isi file backup. Pastikan Anda memiliki salinan data saat ini.</p>
+</div>
+</section>
+
+<section id="settings" class="hidden">
+<div class="card">
+<h3>👨‍👩‍👧 Akses Keluarga</h3>
+<p class="muted">Kelola akses akun keluarga dan tautan berbagi Google Drive di sini.</p>
+</div>
+<section class="card no-print" id="familySharingCard">
+<h3>👨‍👩‍👧 Akses akun istri</h3>
+<p class="muted">Bagikan folder data keluarga ke akun Google istri. Setelah menerima undangan, istri membuka tautan aplikasi bersama di perangkatnya dan masuk dengan akun Google yang diundang.</p>
+<label for="wifeGoogleEmail">Email Google istri</label>
+<input type="email" id="wifeGoogleEmail" value="oktawidiarini@gmail.com" placeholder="nama@gmail.com" autocomplete="email">
+<button class="primary" id="shareWifeButton" onclick="shareFolderWithWife(event)">Bagikan akses edit ke istri</button>
+<label for="familyShareLink">Tautan aplikasi untuk istri</label>
+<input id="familyShareLink" readonly placeholder="Tautan muncul setelah akses dibagikan">
+<button class="secondary primary" type="button" onclick="copyFamilyShareLink()">Salin tautan aplikasi</button>
+<p class="muted">Akun istri mendapat akses Editor ke folder data keluarga. Jangan bagikan tautan ini kepada orang lain.</p>
+</section>
+<div class="card">
+<h3>⚙️ Pengaturan Aplikasi</h3>
+<div class="top-actions">
+<div><strong id="accountLabel">Google Drive terhubung</strong><div class="muted">Data keluarga bersama</div></div>
+<button class="secondary small" onclick="logoutGoogle()">Keluar</button>
+</div>
+<div id="appStatus" class="status">Terhubung.</div>
 </div>
 </section>
 </div>
