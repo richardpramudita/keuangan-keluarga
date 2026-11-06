@@ -1,0 +1,261 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#17324d">
+<meta name="description" content="Aplikasi pencatatan keuangan keluarga">
+<title>Keuangan Keluarga</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f6fa;color:#172033;font-family:Arial,sans-serif}
+header{background:#17324d;color:white;padding:22px 18px}
+header h2{margin:0 0 6px}
+header p{margin:0;color:#d5e1ed;font-size:13px}
+main{max-width:760px;margin:20px auto;padding:0 14px 35px}
+.card{background:white;border:1px solid #e3e8ef;border-radius:16px;padding:17px;margin-bottom:15px}
+.balance{background:#17324d;color:white;border-radius:16px;padding:20px;margin-bottom:15px}
+.balance small{color:#d5e1ed}
+.balance h1{font-size:29px;margin:9px 0}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#ffffff16;padding:12px;border-radius:10px}
+.stat small{display:block;font-size:12px;margin-bottom:7px}
+.stat strong{font-size:17px}
+nav{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:15px}
+nav button{background:white;color:#17324d;border:1px solid #e3e8ef;padding:13px 3px;font-size:12px}
+button{border:0;border-radius:10px;padding:12px;background:#1769aa;color:white;font-weight:bold;cursor:pointer}
+button.active{background:#1769aa;color:white}
+input,select{width:100%;padding:12px;border:1px solid #ccd5df;border-radius:9px;margin:7px 0 13px;font-size:15px;background:white}
+label{font-size:13px;font-weight:bold}
+h3{margin:0 0 15px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.primary{width:100%}
+.item{padding:12px 0;border-bottom:1px solid #edf0f4;display:flex;justify-content:space-between;gap:10px;font-size:14px}
+.item:last-child{border:0}
+.muted{font-size:12px;color:#778398}
+.hidden{display:none}
+footer{text-align:center;color:#8490a0;font-size:12px;padding:20px}
+</style>
+</head>
+<body>
+<header>
+<h2>💰 Keuangan Keluarga</h2>
+<p>Kelola pemasukan dan pengeluaran keluarga</p>
+</header>
+
+<main>
+<section class="balance">
+<small>Sisa saldo keluarga</small>
+<h1 id="balance">Rp0</h1>
+<div class="stats">
+<div class="stat"><small>↑ Pemasukan</small><strong id="incomeTotal">Rp0</strong></div>
+<div class="stat"><small>↓ Pengeluaran</small><strong id="expenseTotal">Rp0</strong></div>
+</div>
+</section>
+
+<nav>
+<button class="active" onclick="showPage('dashboard',this)">Beranda</button>
+<button onclick="showPage('income',this)">Pemasukan</button>
+<button onclick="showPage('expense',this)">Pengeluaran</button>
+<button onclick="showPage('report',this)">Rekap</button>
+</nav>
+
+<section id="dashboard">
+<div class="card">
+<h3>Ringkasan Bulan Ini</h3>
+<div class="muted" id="month"></div>
+<div id="recent"></div>
+</div>
+<div class="card">
+<h3>Pengeluaran per Kategori</h3>
+<div id="categorySummary">Belum ada transaksi.</div>
+</div>
+</section>
+
+<section id="income" class="hidden">
+<div class="card">
+<h3>💵 Pemasukan Keluarga</h3>
+<label>Gaji Suami</label>
+<input type="number" id="husbandSalary" min="0" placeholder="Nominal gaji suami">
+<label>Tunjangan Suami</label>
+<input type="number" id="husbandAllowance" min="0" placeholder="Nominal tunjangan suami">
+<label>Gaji Istri</label>
+<input type="number" id="wifeSalary" min="0" placeholder="Nominal gaji istri">
+<label>Tunjangan Istri</label>
+<input type="number" id="wifeAllowance" min="0" placeholder="Nominal tunjangan istri">
+<button class="primary" onclick="saveIncome()">Simpan Pemasukan</button>
+</div>
+</section>
+
+<section id="expense" class="hidden">
+<div class="card">
+<h3>🛒 Tambah Pengeluaran</h3>
+<label>Tanggal</label>
+<input type="date" id="date">
+<label>Jenis Pengeluaran</label>
+<select id="category"></select>
+<label>Nominal (Rp)</label>
+<input type="number" id="amount" min="1" placeholder="Contoh: 50000">
+<label>Keterangan</label>
+<input id="note" placeholder="Contoh: Belanja mingguan">
+<button class="primary" onclick="addExpense()">Simpan Pengeluaran</button>
+</div>
+<div class="card">
+<h3>Tambah Jenis Pengeluaran</h3>
+<input id="newCategory" placeholder="Nama kategori baru">
+<button onclick="addCategory()">Tambah Kategori</button>
+</div>
+</section>
+
+<section id="report" class="hidden">
+<div class="card">
+<h3>📊 Rekap Pengeluaran</h3>
+<label>Pilih Bulan</label>
+<input type="month" id="reportMonth" onchange="render()">
+<div id="reportList"></div>
+</div>
+</section>
+
+<footer>© 2026 Keuangan Keluarga</footer>
+</main>
+
+<script>
+const API_URL = "GANTI_DENGAN_URL_WEB_APP_ANDA";
+let data = {
+ income:{husbandSalary:0,husbandAllowance:0,wifeSalary:0,wifeAllowance:0},
+ expenses:[],
+ categories:['Belanja dapur','Transportasi','Listrik','Air','Pendidikan','Kesehatan','Cicilan','Lain-lain']
+};
+
+const rupiah = n => new Intl.NumberFormat('id-ID',{
+ style:'currency',currency:'IDR',maximumFractionDigits:0
+}).format(n||0);
+
+async function api(action,values={}) {
+ if(API_URL.startsWith('GANTI_')) {
+   throw new Error('URL backend belum dipasang.');
+ }
+ const response=await fetch(API_URL,{
+   method:'POST',
+   body:JSON.stringify({action,...values})
+ });
+ return await response.json();
+}
+
+async function loadData(){
+ try{
+   const result=await api('getData');
+   if(!result.success) throw new Error(result.message);
+   data=result.data;
+   fillIncome();
+   render();
+ }catch(e){
+   alert('Belum dapat mengambil data: '+e.message);
+ }
+}
+
+function fillIncome(){
+ document.getElementById('husbandSalary').value=data.income.husbandSalary||0;
+ document.getElementById('husbandAllowance').value=data.income.husbandAllowance||0;
+ document.getElementById('wifeSalary').value=data.income.wifeSalary||0;
+ document.getElementById('wifeAllowance').value=data.income.wifeAllowance||0;
+}
+
+async function saveIncome(){
+ try{
+   const values={
+    husbandSalary:Number(document.getElementById('husbandSalary').value),
+    husbandAllowance:Number(document.getElementById('husbandAllowance').value),
+    wifeSalary:Number(document.getElementById('wifeSalary').value),
+    wifeAllowance:Number(document.getElementById('wifeAllowance').value)
+   };
+   const result=await api('updateIncome',values);
+   if(!result.success) throw new Error(result.message);
+   data.income=values;
+   render();
+   alert('Pemasukan berhasil disimpan.');
+ }catch(e){alert(e.message)}
+}
+
+async function addExpense(){
+ const values={
+  date:document.getElementById('date').value,
+  category:document.getElementById('category').value,
+  amount:Number(document.getElementById('amount').value),
+  note:document.getElementById('note').value
+ };
+ if(!values.date||!values.category||values.amount<=0){
+  alert('Lengkapi tanggal, jenis, dan nominal.');return;
+ }
+ try{
+  const result=await api('addExpense',values);
+  if(!result.success) throw new Error(result.message);
+  await loadData();
+  document.getElementById('amount').value='';
+  document.getElementById('note').value='';
+  alert('Pengeluaran berhasil disimpan.');
+ }catch(e){alert(e.message)}
+}
+
+async function addCategory(){
+ const category=document.getElementById('newCategory').value.trim();
+ if(!category)return alert('Masukkan nama kategori.');
+ try{
+  const result=await api('addCategory',{category});
+  if(!result.success)throw new Error(result.message);
+  data.categories=result.data.categories;
+  document.getElementById('newCategory').value='';
+  render();
+  alert('Kategori ditambahkan.');
+ }catch(e){alert(e.message)}
+}
+
+function showPage(id,btn){
+ document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));
+ document.getElementById(id).classList.remove('hidden');
+ document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+ btn.classList.add('active');
+ render();
+}
+
+function render(){
+ const income=Object.values(data.income).reduce((a,b)=>a+Number(b||0),0);
+ const now=new Date();
+ const month=now.toISOString().slice(0,7);
+ const expenses=data.expenses.filter(e=>e.date.startsWith(month));
+ const total=expenses.reduce((a,e)=>a+Number(e.amount),0);
+ document.getElementById('incomeTotal').textContent=rupiah(income);
+ document.getElementById('expenseTotal').textContent=rupiah(total);
+ document.getElementById('balance').textContent=rupiah(income-total);
+ document.getElementById('month').textContent=now.toLocaleDateString('id-ID',{month:'long',year:'numeric'});
+ document.getElementById('category').innerHTML=data.categories.map(c=>`<option>${escapeHTML(c)}</option>`).join('');
+ document.getElementById('recent').innerHTML=expenses.slice(-5).reverse().map(e=>
+ `<div class="item"><span>${escapeHTML(e.category)}<br><small>${escapeHTML(e.date)}</small></span><strong>${rupiah(e.amount)}</strong></div>`).join('')||'Belum ada transaksi.';
+ const summary={};
+ expenses.forEach(e=>summary[e.category]=(summary[e.category]||0)+Number(e.amount));
+ document.getElementById('categorySummary').innerHTML=Object.entries(summary).map(([k,v])=>
+ `<div class="item"><span>${escapeHTML(k)}</span><strong>${rupiah(v)}</strong></div>`).join('')||'Belum ada transaksi.';
+ const selected=document.getElementById('reportMonth').value||month;
+ const report=data.expenses.filter(e=>e.date.startsWith(selected));
+ const groups={};
+ report.forEach(e=>groups[e.category]=(groups[e.category]||0)+Number(e.amount));
+ document.getElementById('reportList').innerHTML=Object.entries(groups).map(([k,v])=>
+ `<div class="item"><span>${escapeHTML(k)}</span><strong>${rupiah(v)}</strong></div>`).join('')+
+ `<div class="item"><strong>Total</strong><strong>${rupiah(report.reduce((a,e)=>a+Number(e.amount),0))}</strong></div>`;
+}
+
+function escapeHTML(value){
+ return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('date').value=new Date().toISOString().slice(0,10);
+document.getElementById('reportMonth').value=new Date().toISOString().slice(0,7);
+if('serviceWorker' in navigator){
+ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.error));
+}
+loadData();
+</script>
+</body>
+</html>
