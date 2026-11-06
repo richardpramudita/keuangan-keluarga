@@ -25,7 +25,7 @@ main{max-width:760px;margin:20px auto;padding:0 14px 35px}
 .stat{background:#ffffff16;padding:12px;border-radius:10px}
 .stat small{display:block;font-size:12px;margin-bottom:7px}
 .stat strong{font-size:17px}
-nav{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:15px}
+nav{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:15px}
 nav button{background:white;color:#17324d;border:1px solid #e3e8ef;padding:13px 3px;font-size:12px}
 button{border:0;border-radius:10px;padding:12px;background:#1769aa;color:white;font-weight:bold;cursor:pointer}
 button:disabled{opacity:.55;cursor:wait}
@@ -44,10 +44,20 @@ footer{text-align:center;color:#8490a0;font-size:12px;padding:20px}
 .success{background:#eaf8ef;color:#216b39}
 .top-actions{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .top-actions button{font-size:12px}
+.budget-card{padding:14px 0;border-bottom:1px solid #edf0f4}
+.budget-card:last-child{border-bottom:0}
+.budget-line{display:flex;justify-content:space-between;gap:8px;margin:7px 0;font-size:13px}
+.budget-progress{height:9px;background:#e8edf2;border-radius:20px;overflow:hidden;margin-top:10px}
+.budget-progress div{height:100%;border-radius:20px}
+.budget-total{background:#eaf8ef;border-radius:12px;padding:16px;margin-top:12px}
+.budget-total.negative{background:#fff0f0}
+.budget-total strong{font-size:22px}
+.budget-input{margin-bottom:5px}
 @media(max-width:430px){
- nav{gap:5px}
- nav button{font-size:11px;padding:12px 2px}
+ nav{gap:4px}
+ nav button{font-size:10px;padding:12px 1px}
  .balance h1{font-size:25px}
+ .stat strong{font-size:14px}
 }
 </style>
 </head>
@@ -105,6 +115,7 @@ Terhubung dengan Google Drive.
 
 <nav>
 <button class="active" onclick="showPage('dashboard',this)">Beranda</button>
+<button onclick="showPage('budget',this)">Anggaran</button>
 <button onclick="showPage('income',this)">Pemasukan</button>
 <button onclick="showPage('expense',this)">Pengeluaran</button>
 <button onclick="showPage('report',this)">Rekap</button>
@@ -116,45 +127,94 @@ Terhubung dengan Google Drive.
 <div class="muted" id="month"></div>
 <div id="recent"></div>
 </div>
+
 <div class="card">
 <h3>Pengeluaran per Kategori</h3>
 <div id="categorySummary">Belum ada transaksi.</div>
 </div>
+
+<div class="card">
+<h3>💰 Sisa Anggaran Bulan Ini</h3>
+<div id="dashboardBudget"></div>
+</div>
+</section>
+
+<!-- HALAMAN ANGGARAN -->
+<section id="budget" class="hidden">
+
+<div class="card">
+<h3>💰 Pengaturan Anggaran Bulanan</h3>
+
+<label>Pilih Bulan Anggaran</label>
+<input type="month" id="budgetMonth" onchange="renderBudget()">
+
+<div class="status">
+Atur anggaran masing-masing kategori.
+Setiap bulan memiliki anggaran tersendiri.
+</div>
+
+<div id="budgetInputs"></div>
+
+<button class="primary" onclick="saveBudget(event)">
+Simpan Semua Anggaran
+</button>
+</div>
+
+<div class="card">
+<h3>📊 Saldo Anggaran per Kategori</h3>
+<div id="budgetSummary"></div>
+</div>
+
+<div class="card">
+<h3>💵 Ringkasan Seluruh Anggaran</h3>
+<div id="budgetTotalSummary"></div>
+</div>
+
 </section>
 
 <section id="income" class="hidden">
 <div class="card">
 <h3>💵 Pemasukan Keluarga</h3>
+
 <label>Gaji Suami</label>
 <input type="number" id="husbandSalary" min="0" placeholder="Nominal gaji suami">
+
 <label>Tunjangan Suami</label>
 <input type="number" id="husbandAllowance" min="0" placeholder="Nominal tunjangan suami">
+
 <label>Gaji Istri</label>
 <input type="number" id="wifeSalary" min="0" placeholder="Nominal gaji istri">
+
 <label>Tunjangan Istri</label>
 <input type="number" id="wifeAllowance" min="0" placeholder="Nominal tunjangan istri">
-<button class="primary" onclick="saveIncome()">Simpan Pemasukan</button>
+
+<button class="primary" onclick="saveIncome(event)">Simpan Pemasukan</button>
 </div>
 </section>
 
 <section id="expense" class="hidden">
 <div class="card">
 <h3>🛒 Tambah Pengeluaran</h3>
+
 <label>Tanggal</label>
 <input type="date" id="date">
+
 <label>Jenis Pengeluaran</label>
 <select id="category"></select>
+
 <label>Nominal (Rp)</label>
 <input type="number" id="amount" min="1" placeholder="Contoh: 50000">
+
 <label>Keterangan</label>
 <input id="note" placeholder="Contoh: Belanja mingguan">
-<button class="primary" onclick="addExpense()">Simpan Pengeluaran</button>
+
+<button class="primary" onclick="addExpense(event)">Simpan Pengeluaran</button>
 </div>
 
 <div class="card">
 <h3>Tambah Jenis Pengeluaran</h3>
 <input id="newCategory" placeholder="Nama kategori baru">
-<button onclick="addCategory()">Tambah Kategori</button>
+<button onclick="addCategory(event)">Tambah Kategori</button>
 </div>
 </section>
 
@@ -168,6 +228,7 @@ Terhubung dengan Google Drive.
 </section>
 
 </div>
+
 <footer>© 2026 Keuangan Keluarga</footer>
 </main>
 
@@ -183,6 +244,7 @@ let accessToken = null;
 let tokenClient = null;
 let driveFolderId = null;
 let dataFileId = null;
+
 let data = {
   income:{
     husbandSalary:0,
@@ -194,7 +256,8 @@ let data = {
   categories:[
     "Belanja dapur","Transportasi","Listrik","Air",
     "Pendidikan","Kesehatan","Cicilan","Lain-lain"
-  ]
+  ],
+  budgets:{}
 };
 
 /* FUNGSI UMUM */
@@ -263,7 +326,6 @@ async function loginGoogle(){
         scope:DRIVE_SCOPE,
         callback:async(response)=>{
           button.disabled=false;
-
           if(response.error){
             setLoginStatus("Login gagal: "+response.error,"error");
             return;
@@ -424,11 +486,16 @@ function normalizeData(){
   };
 
   if(!Array.isArray(data.expenses)) data.expenses=[];
+
   if(!Array.isArray(data.categories)){
     data.categories=[
       "Belanja dapur","Transportasi","Listrik","Air",
       "Pendidikan","Kesehatan","Cicilan","Lain-lain"
     ];
+  }
+
+  if(!data.budgets || typeof data.budgets!=="object" || Array.isArray(data.budgets)){
+    data.budgets={};
   }
 }
 
@@ -469,6 +536,7 @@ async function initializeApp(){
     document.getElementById("userEmail").textContent="Google Drive terhubung";
     document.getElementById("date").value=localDate();
     document.getElementById("reportMonth").value=currentMonth();
+    document.getElementById("budgetMonth").value=currentMonth();
 
     fillIncome();
     render();
@@ -489,7 +557,7 @@ function fillIncome(){
   document.getElementById("wifeAllowance").value=data.income.wifeAllowance;
 }
 
-async function saveIncome(){
+async function saveIncome(event){
   const button=event.currentTarget;
   button.disabled=true;
 
@@ -518,7 +586,7 @@ async function saveIncome(){
 }
 
 /* PENGELUARAN */
-async function addExpense(){
+async function addExpense(event){
   const button=event.currentTarget;
   button.disabled=true;
 
@@ -558,7 +626,7 @@ async function addExpense(){
 }
 
 /* KATEGORI */
-async function addCategory(){
+async function addCategory(event){
   const button=event.currentTarget;
   button.disabled=true;
 
@@ -594,6 +662,199 @@ function showPage(id,btn){
   render();
 }
 
+/* FUNGSI ANGGARAN BULANAN */
+function getBudgetMonth(){
+  return document.getElementById("budgetMonth").value || currentMonth();
+}
+
+function getMonthExpenses(month){
+  return data.expenses.filter(e=>String(e.date).startsWith(month));
+}
+
+function getCategoryExpenses(category,month){
+  return getMonthExpenses(month)
+    .filter(e=>e.category===category)
+    .reduce((total,e)=>total+Number(e.amount||0),0);
+}
+
+function getAllCategories(){
+  return [...new Set([
+    ...data.categories,
+    ...data.expenses.map(e=>e.category)
+  ])];
+}
+
+function renderBudget(){
+  if(!document.getElementById("budgetMonth")) return;
+
+  const month=getBudgetMonth();
+
+  if(!data.budgets[month]){
+    data.budgets[month]={};
+  }
+
+  const categories=getAllCategories();
+
+  document.getElementById("budgetInputs").innerHTML=
+    categories.map(category=>`
+      <div class="budget-card">
+        <label>${escapeHTML(category)}</label>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          class="budget-input"
+          data-category="${escapeHTML(category)}"
+          value="${Number(data.budgets[month][category]||0)}"
+          placeholder="Masukkan anggaran kategori"
+        >
+      </div>
+    `).join("");
+
+  const totalBudget=categories.reduce(
+    (sum,c)=>sum+Number(data.budgets[month][c]||0),0
+  );
+
+  const monthExpenses=getMonthExpenses(month);
+
+  const totalExpense=monthExpenses.reduce(
+    (sum,e)=>sum+Number(e.amount||0),0
+  );
+
+  const remaining=totalBudget-totalExpense;
+
+  document.getElementById("budgetSummary").innerHTML=
+    categories.map(category=>{
+      const budget=Number(data.budgets[month][category]||0);
+      const expense=getCategoryExpenses(category,month);
+      const balance=budget-expense;
+
+      const percentage=budget>0
+        ? expense/budget*100
+        : (expense>0?100:0);
+
+      const width=Math.min(percentage,100);
+      const color=balance<0?"#d93025":"#269b64";
+
+      return `
+        <div class="budget-card">
+          <strong>${escapeHTML(category)}</strong>
+
+          <div class="budget-line">
+            <span>Anggaran</span>
+            <strong>${rupiah(budget)}</strong>
+          </div>
+
+          <div class="budget-line">
+            <span>Pengeluaran</span>
+            <strong>${rupiah(expense)}</strong>
+          </div>
+
+          <div class="budget-line">
+            <span>Saldo tersisa</span>
+            <strong style="color:${color}">
+              ${rupiah(balance)}
+            </strong>
+          </div>
+
+          <div class="budget-progress">
+            <div style="width:${width}%;background:${color}"></div>
+          </div>
+
+          <div class="muted" style="margin-top:6px">
+            ${percentage.toFixed(1)}% anggaran digunakan
+          </div>
+
+          ${balance<0
+            ? '<div style="color:#d93025;font-size:12px;margin-top:6px">⚠️ Anggaran terlampaui!</div>'
+            : ''
+          }
+        </div>
+      `;
+    }).join("");
+
+  document.getElementById("budgetTotalSummary").innerHTML=`
+    <div class="item">
+      <span>Total anggaran</span>
+      <strong>${rupiah(totalBudget)}</strong>
+    </div>
+
+    <div class="item">
+      <span>Total pengeluaran</span>
+      <strong>${rupiah(totalExpense)}</strong>
+    </div>
+
+    <div class="budget-total ${remaining<0?'negative':''}">
+      <div class="muted">SISA ANGGARAN SELURUH KATEGORI</div>
+      <strong style="color:${remaining<0?'#d93025':'#216b39'}">
+        ${rupiah(remaining)}
+      </strong>
+      ${remaining<0
+        ? '<div style="color:#d93025;font-size:12px;margin-top:7px">Pengeluaran melebihi total anggaran.</div>'
+        : ''
+      }
+    </div>
+  `;
+
+  const dashboard=document.getElementById("dashboardBudget");
+
+  if(dashboard){
+    dashboard.innerHTML=`
+      <div class="item">
+        <span>Total anggaran</span>
+        <strong>${rupiah(totalBudget)}</strong>
+      </div>
+      <div class="item">
+        <span>Total pengeluaran</span>
+        <strong>${rupiah(totalExpense)}</strong>
+      </div>
+      <div class="item">
+        <strong>Sisa anggaran</strong>
+        <strong style="color:${remaining<0?'#d93025':'#216b39'}">
+          ${rupiah(remaining)}
+        </strong>
+      </div>
+    `;
+  }
+}
+
+async function saveBudget(event){
+  const button=event.currentTarget;
+  button.disabled=true;
+
+  try{
+    const month=getBudgetMonth();
+    const inputs=document.querySelectorAll(".budget-input");
+    const newBudgets={};
+
+    inputs.forEach(input=>{
+      const category=input.dataset.category;
+      const amount=Number(input.value);
+
+      if(!Number.isFinite(amount)||amount<0){
+        throw new Error("Nominal anggaran tidak valid.");
+      }
+
+      newBudgets[category]=amount;
+    });
+
+    data.budgets[month]={
+      ...data.budgets[month],
+      ...newBudgets
+    };
+
+    await saveToDrive();
+
+    renderBudget();
+    setStatus("Anggaran bulan "+month+" berhasil disimpan.","success");
+
+  }catch(error){
+    setStatus("Gagal menyimpan anggaran: "+error.message,"error");
+  }finally{
+    button.disabled=false;
+  }
+}
+
 /* DASHBOARD DAN REKAP */
 function render(){
   const income=Object.values(data.income).reduce((a,b)=>a+Number(b||0),0);
@@ -610,15 +871,21 @@ function render(){
     new Date().toLocaleDateString("id-ID",{month:"long",year:"numeric"});
 
   document.getElementById("category").innerHTML=
-    data.categories.map(c=>`<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join("");
+    data.categories.map(c=>
+      `<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`
+    ).join("");
 
   document.getElementById("recent").innerHTML=
-    expenses.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5).map(e=>
-      `<div class="item">
-        <span>${escapeHTML(e.category)}<br><small>${escapeHTML(e.date)}</small></span>
-        <strong>${rupiah(e.amount)}</strong>
-      </div>`
-    ).join("")||"Belum ada transaksi.";
+    expenses.slice()
+      .sort((a,b)=>b.date.localeCompare(a.date))
+      .slice(0,5)
+      .map(e=>`
+        <div class="item">
+          <span>${escapeHTML(e.category)}<br>
+          <small>${escapeHTML(e.date)}</small></span>
+          <strong>${rupiah(e.amount)}</strong>
+        </div>
+      `).join("")||"Belum ada transaksi.";
 
   const summary={};
 
@@ -644,11 +911,14 @@ function render(){
       `<div class="item"><span>${escapeHTML(k)}</span><strong>${rupiah(v)}</strong></div>`
     ).join("")+
     `<div class="item"><strong>Total</strong><strong>${rupiah(report.reduce((a,e)=>a+Number(e.amount),0))}</strong></div>`;
+
+  renderBudget();
 }
 
 /* INISIALISASI */
 document.getElementById("date").value=localDate();
 document.getElementById("reportMonth").value=currentMonth();
+document.getElementById("budgetMonth").value=currentMonth();
 
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>{
