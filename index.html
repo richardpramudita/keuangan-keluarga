@@ -3,12 +3,13 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
- <script src="https://accounts.google.com/gsi/client" async defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#17324d">
 <meta name="description" content="Aplikasi pencatatan keuangan keluarga">
 <title>Keuangan Keluarga</title>
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="./manifest.json">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f3f6fa;color:#172033;font-family:Arial,sans-serif}
@@ -27,19 +28,30 @@ main{max-width:760px;margin:20px auto;padding:0 14px 35px}
 nav{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:15px}
 nav button{background:white;color:#17324d;border:1px solid #e3e8ef;padding:13px 3px;font-size:12px}
 button{border:0;border-radius:10px;padding:12px;background:#1769aa;color:white;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}
 button.active{background:#1769aa;color:white}
 input,select{width:100%;padding:12px;border:1px solid #ccd5df;border-radius:9px;margin:7px 0 13px;font-size:15px;background:white}
 label{font-size:13px;font-weight:bold}
 h3{margin:0 0 15px}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .primary{width:100%}
 .item{padding:12px 0;border-bottom:1px solid #edf0f4;display:flex;justify-content:space-between;gap:10px;font-size:14px}
 .item:last-child{border:0}
 .muted{font-size:12px;color:#778398}
-.hidden{display:none}
+.hidden{display:none!important}
 footer{text-align:center;color:#8490a0;font-size:12px;padding:20px}
+.status{padding:12px;border-radius:9px;background:#eef4fa;color:#36516b;font-size:13px;margin-bottom:15px}
+.error{background:#fff0f0;color:#a32626}
+.success{background:#eaf8ef;color:#216b39}
+.top-actions{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.top-actions button{font-size:12px}
+@media(max-width:430px){
+ nav{gap:5px}
+ nav button{font-size:11px;padding:12px 2px}
+ .balance h1{font-size:25px}
+}
 </style>
 </head>
+
 <body>
 <header>
 <h2>💰 Keuangan Keluarga</h2>
@@ -47,12 +59,47 @@ footer{text-align:center;color:#8490a0;font-size:12px;padding:20px}
 </header>
 
 <main>
+
+<section id="loginCard" class="card">
+<h3>🔐 Masuk dengan Google</h3>
+<p class="muted">
+Data keuangan akan disimpan di Google Drive akun yang Anda gunakan.
+Satu akun Google dapat digunakan bersama oleh satu keluarga.
+</p>
+<button id="loginButton" class="primary" onclick="loginGoogle()">
+Masuk dengan Google
+</button>
+<div id="loginStatus" class="status" style="margin-top:14px">
+Silakan masuk untuk mulai menggunakan aplikasi.
+</div>
+</section>
+
+<div id="appArea" class="hidden">
+
+<div class="card top-actions">
+<div>
+<strong id="userEmail">Akun Google</strong>
+<div class="muted">Penyimpanan Google Drive pribadi</div>
+</div>
+<button onclick="logoutGoogle()">Keluar</button>
+</div>
+
+<div id="appStatus" class="status">
+Terhubung dengan Google Drive.
+</div>
+
 <section class="balance">
-<small>Sisa saldo keluarga</small>
+<small>Sisa saldo keluarga bulan ini</small>
 <h1 id="balance">Rp0</h1>
 <div class="stats">
-<div class="stat"><small>↑ Pemasukan</small><strong id="incomeTotal">Rp0</strong></div>
-<div class="stat"><small>↓ Pengeluaran</small><strong id="expenseTotal">Rp0</strong></div>
+<div class="stat">
+<small>↑ Pemasukan</small>
+<strong id="incomeTotal">Rp0</strong>
+</div>
+<div class="stat">
+<small>↓ Pengeluaran</small>
+<strong id="expenseTotal">Rp0</strong>
+</div>
 </div>
 </section>
 
@@ -103,6 +150,7 @@ footer{text-align:center;color:#8490a0;font-size:12px;padding:20px}
 <input id="note" placeholder="Contoh: Belanja mingguan">
 <button class="primary" onclick="addExpense()">Simpan Pengeluaran</button>
 </div>
+
 <div class="card">
 <h3>Tambah Jenis Pengeluaran</h3>
 <input id="newCategory" placeholder="Nama kategori baru">
@@ -119,146 +167,494 @@ footer{text-align:center;color:#8490a0;font-size:12px;padding:20px}
 </div>
 </section>
 
+</div>
 <footer>© 2026 Keuangan Keluarga</footer>
 </main>
 
 <script>
-const const GOOGLE_CLIENT_ID = "446936050738-0ne4vlp0p2gm0qug3tntqs97kje9k442.apps.googleusercontent.com";
-
+/* KONFIGURASI GOOGLE */
+const GOOGLE_CLIENT_ID = "446936050738-0ne4vlp0p2gm0qug3tntqs97kje9k442.apps.googleusercontent.com";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+const FOLDER_NAME = "Keuangan Keluarga";
+const DATA_FILE_NAME = "data-keuangan.json";
+
+let accessToken = null;
+let tokenClient = null;
+let driveFolderId = null;
+let dataFileId = null;
 let data = {
- income:{husbandSalary:0,husbandAllowance:0,wifeSalary:0,wifeAllowance:0},
- expenses:[],
- categories:['Belanja dapur','Transportasi','Listrik','Air','Pendidikan','Kesehatan','Cicilan','Lain-lain']
+  income:{
+    husbandSalary:0,
+    husbandAllowance:0,
+    wifeSalary:0,
+    wifeAllowance:0
+  },
+  expenses:[],
+  categories:[
+    "Belanja dapur","Transportasi","Listrik","Air",
+    "Pendidikan","Kesehatan","Cicilan","Lain-lain"
+  ]
 };
 
-const rupiah = n => new Intl.NumberFormat('id-ID',{
- style:'currency',currency:'IDR',maximumFractionDigits:0
+/* FUNGSI UMUM */
+const rupiah = n => new Intl.NumberFormat("id-ID",{
+  style:"currency",
+  currency:"IDR",
+  maximumFractionDigits:0
 }).format(n||0);
 
-async function api(action,values={}) {
- if(API_URL.startsWith('GANTI_')) {
-   throw new Error('URL backend belum dipasang.');
- }
- const response=await fetch(API_URL,{
-   method:'POST',
-   body:JSON.stringify({action,...values})
- });
- return await response.json();
+function setStatus(message,type=""){
+  const el=document.getElementById("appStatus");
+  el.textContent=message;
+  el.className="status "+type;
 }
 
-async function loadData(){
- try{
-   const result=await api('getData');
-   if(!result.success) throw new Error(result.message);
-   data=result.data;
-   fillIncome();
-   render();
- }catch(e){
-   alert('Belum dapat mengambil data: '+e.message);
- }
-}
-
-function fillIncome(){
- document.getElementById('husbandSalary').value=data.income.husbandSalary||0;
- document.getElementById('husbandAllowance').value=data.income.husbandAllowance||0;
- document.getElementById('wifeSalary').value=data.income.wifeSalary||0;
- document.getElementById('wifeAllowance').value=data.income.wifeAllowance||0;
-}
-
-async function saveIncome(){
- try{
-   const values={
-    husbandSalary:Number(document.getElementById('husbandSalary').value),
-    husbandAllowance:Number(document.getElementById('husbandAllowance').value),
-    wifeSalary:Number(document.getElementById('wifeSalary').value),
-    wifeAllowance:Number(document.getElementById('wifeAllowance').value)
-   };
-   const result=await api('updateIncome',values);
-   if(!result.success) throw new Error(result.message);
-   data.income=values;
-   render();
-   alert('Pemasukan berhasil disimpan.');
- }catch(e){alert(e.message)}
-}
-
-async function addExpense(){
- const values={
-  date:document.getElementById('date').value,
-  category:document.getElementById('category').value,
-  amount:Number(document.getElementById('amount').value),
-  note:document.getElementById('note').value
- };
- if(!values.date||!values.category||values.amount<=0){
-  alert('Lengkapi tanggal, jenis, dan nominal.');return;
- }
- try{
-  const result=await api('addExpense',values);
-  if(!result.success) throw new Error(result.message);
-  await loadData();
-  document.getElementById('amount').value='';
-  document.getElementById('note').value='';
-  alert('Pengeluaran berhasil disimpan.');
- }catch(e){alert(e.message)}
-}
-
-async function addCategory(){
- const category=document.getElementById('newCategory').value.trim();
- if(!category)return alert('Masukkan nama kategori.');
- try{
-  const result=await api('addCategory',{category});
-  if(!result.success)throw new Error(result.message);
-  data.categories=result.data.categories;
-  document.getElementById('newCategory').value='';
-  render();
-  alert('Kategori ditambahkan.');
- }catch(e){alert(e.message)}
-}
-
-function showPage(id,btn){
- document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));
- document.getElementById(id).classList.remove('hidden');
- document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
- btn.classList.add('active');
- render();
-}
-
-function render(){
- const income=Object.values(data.income).reduce((a,b)=>a+Number(b||0),0);
- const now=new Date();
- const month=now.toISOString().slice(0,7);
- const expenses=data.expenses.filter(e=>e.date.startsWith(month));
- const total=expenses.reduce((a,e)=>a+Number(e.amount),0);
- document.getElementById('incomeTotal').textContent=rupiah(income);
- document.getElementById('expenseTotal').textContent=rupiah(total);
- document.getElementById('balance').textContent=rupiah(income-total);
- document.getElementById('month').textContent=now.toLocaleDateString('id-ID',{month:'long',year:'numeric'});
- document.getElementById('category').innerHTML=data.categories.map(c=>`<option>${escapeHTML(c)}</option>`).join('');
- document.getElementById('recent').innerHTML=expenses.slice(-5).reverse().map(e=>
- `<div class="item"><span>${escapeHTML(e.category)}<br><small>${escapeHTML(e.date)}</small></span><strong>${rupiah(e.amount)}</strong></div>`).join('')||'Belum ada transaksi.';
- const summary={};
- expenses.forEach(e=>summary[e.category]=(summary[e.category]||0)+Number(e.amount));
- document.getElementById('categorySummary').innerHTML=Object.entries(summary).map(([k,v])=>
- `<div class="item"><span>${escapeHTML(k)}</span><strong>${rupiah(v)}</strong></div>`).join('')||'Belum ada transaksi.';
- const selected=document.getElementById('reportMonth').value||month;
- const report=data.expenses.filter(e=>e.date.startsWith(selected));
- const groups={};
- report.forEach(e=>groups[e.category]=(groups[e.category]||0)+Number(e.amount));
- document.getElementById('reportList').innerHTML=Object.entries(groups).map(([k,v])=>
- `<div class="item"><span>${escapeHTML(k)}</span><strong>${rupiah(v)}</strong></div>`).join('')+
- `<div class="item"><strong>Total</strong><strong>${rupiah(report.reduce((a,e)=>a+Number(e.amount),0))}</strong></div>`;
+function setLoginStatus(message,type=""){
+  const el=document.getElementById("loginStatus");
+  el.textContent=message;
+  el.className="status "+type;
 }
 
 function escapeHTML(value){
- return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(value).replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;"
+  }[c]));
 }
 
-document.getElementById('date').value=new Date().toISOString().slice(0,10);
-document.getElementById('reportMonth').value=new Date().toISOString().slice(0,7);
-if('serviceWorker' in navigator){
- window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.error));
+function currentMonth(){
+  const d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
 }
-loadData();
+
+function localDate(){
+  const d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+/* LOGIN GOOGLE */
+function waitForGoogle(){
+  return new Promise((resolve,reject)=>{
+    let attempts=0;
+    const timer=setInterval(()=>{
+      if(window.google && google.accounts && google.accounts.oauth2){
+        clearInterval(timer);
+        resolve();
+      }else if(++attempts>40){
+        clearInterval(timer);
+        reject(new Error("Layanan login Google belum termuat. Muat ulang halaman."));
+      }
+    },250);
+  });
+}
+
+async function loginGoogle(){
+  const button=document.getElementById("loginButton");
+  button.disabled=true;
+  setLoginStatus("Menghubungkan ke Google...");
+
+  try{
+    await waitForGoogle();
+
+    if(!tokenClient){
+      tokenClient=google.accounts.oauth2.initTokenClient({
+        client_id:GOOGLE_CLIENT_ID,
+        scope:DRIVE_SCOPE,
+        callback:async(response)=>{
+          button.disabled=false;
+
+          if(response.error){
+            setLoginStatus("Login gagal: "+response.error,"error");
+            return;
+          }
+
+          accessToken=response.access_token;
+          await initializeApp();
+        }
+      });
+    }
+
+    tokenClient.requestAccessToken({prompt:"select_account"});
+
+  }catch(error){
+    button.disabled=false;
+    setLoginStatus(error.message,"error");
+  }
+}
+
+function logoutGoogle(){
+  if(accessToken && window.google && google.accounts){
+    google.accounts.oauth2.revoke(accessToken,()=>{});
+  }
+
+  accessToken=null;
+  driveFolderId=null;
+  dataFileId=null;
+
+  document.getElementById("appArea").classList.add("hidden");
+  document.getElementById("loginCard").classList.remove("hidden");
+  document.getElementById("loginButton").disabled=false;
+  setLoginStatus("Anda telah keluar. Masuk kembali untuk menggunakan aplikasi.");
+}
+
+/* GOOGLE DRIVE API */
+async function driveRequest(url,options={}){
+  const response=await fetch(url,{
+    ...options,
+    headers:{
+      "Authorization":"Bearer "+accessToken,
+      ...(options.headers||{})
+    }
+  });
+
+  const text=await response.text();
+  let result={};
+
+  try{
+    result=text?JSON.parse(text):{};
+  }catch(e){
+    throw new Error("Respons Google Drive tidak dapat dibaca.");
+  }
+
+  if(!response.ok){
+    throw new Error(
+      result.error?.message ||
+      "Google Drive gagal memproses permintaan ("+response.status+")."
+    );
+  }
+
+  return result;
+}
+
+async function findDriveFile(name,mimeType,parentId=null){
+  let query="name='"+name.replace(/'/g,"\\'")+"' and trashed=false";
+
+  if(mimeType){
+    query+=" and mimeType='"+mimeType+"'";
+  }
+
+  if(parentId){
+    query+=" and '"+parentId+"' in parents";
+  }
+
+  const params=new URLSearchParams({
+    q:query,
+    fields:"files(id,name,mimeType)",
+    pageSize:"100"
+  });
+
+  const result=await driveRequest(
+    "https://www.googleapis.com/drive/v3/files?"+params
+  );
+
+  return result.files?.[0]||null;
+}
+
+async function createDriveFolder(){
+  const result=await driveRequest(
+    "https://www.googleapis.com/drive/v3/files",
+    {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        name:FOLDER_NAME,
+        mimeType:"application/vnd.google-apps.folder"
+      })
+    }
+  );
+
+  return result.id;
+}
+
+async function createDataFile(){
+  const metadata=await driveRequest(
+    "https://www.googleapis.com/drive/v3/files",
+    {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        name:DATA_FILE_NAME,
+        mimeType:"application/json",
+        parents:[driveFolderId]
+      })
+    }
+  );
+
+  dataFileId=metadata.id;
+  await uploadDataFile();
+}
+
+async function uploadDataFile(){
+  if(!dataFileId) throw new Error("File data belum tersedia.");
+
+  await driveRequest(
+    "https://www.googleapis.com/upload/drive/v3/files/"+dataFileId+"?uploadType=media",
+    {
+      method:"PATCH",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(data,null,2)
+    }
+  );
+}
+
+async function downloadDataFile(){
+  const result=await driveRequest(
+    "https://www.googleapis.com/drive/v3/files/"+dataFileId+"?alt=media"
+  );
+
+  if(result && typeof result==="object"){
+    data=result;
+  }else{
+    throw new Error("Isi file keuangan tidak valid.");
+  }
+
+  normalizeData();
+}
+
+function normalizeData(){
+  if(!data || typeof data!=="object") data={};
+  if(!data.income) data.income={};
+
+  data.income={
+    husbandSalary:Number(data.income.husbandSalary)||0,
+    husbandAllowance:Number(data.income.husbandAllowance)||0,
+    wifeSalary:Number(data.income.wifeSalary)||0,
+    wifeAllowance:Number(data.income.wifeAllowance)||0
+  };
+
+  if(!Array.isArray(data.expenses)) data.expenses=[];
+  if(!Array.isArray(data.categories)){
+    data.categories=[
+      "Belanja dapur","Transportasi","Listrik","Air",
+      "Pendidikan","Kesehatan","Cicilan","Lain-lain"
+    ];
+  }
+}
+
+async function saveToDrive(){
+  await uploadDataFile();
+}
+
+/* PERSIAPAN APLIKASI */
+async function initializeApp(){
+  try{
+    setLoginStatus("Membuka Google Drive...");
+
+    const folder=await findDriveFile(
+      FOLDER_NAME,
+      "application/vnd.google-apps.folder"
+    );
+
+    driveFolderId=folder ? folder.id : await createDriveFolder();
+
+    const file=await findDriveFile(
+      DATA_FILE_NAME,
+      "application/json",
+      driveFolderId
+    );
+
+    if(file){
+      dataFileId=file.id;
+      await downloadDataFile();
+    }else{
+      dataFileId=null;
+      normalizeData();
+      await createDataFile();
+    }
+
+    document.getElementById("loginCard").classList.add("hidden");
+    document.getElementById("appArea").classList.remove("hidden");
+
+    document.getElementById("userEmail").textContent="Google Drive terhubung";
+    document.getElementById("date").value=localDate();
+    document.getElementById("reportMonth").value=currentMonth();
+
+    fillIncome();
+    render();
+
+    setStatus("Data berhasil terhubung dan tersimpan di Google Drive.","success");
+
+  }catch(error){
+    setLoginStatus("Gagal menghubungkan Drive: "+error.message,"error");
+    document.getElementById("loginButton").disabled=false;
+  }
+}
+
+/* PEMASUKAN */
+function fillIncome(){
+  document.getElementById("husbandSalary").value=data.income.husbandSalary;
+  document.getElementById("husbandAllowance").value=data.income.husbandAllowance;
+  document.getElementById("wifeSalary").value=data.income.wifeSalary;
+  document.getElementById("wifeAllowance").value=data.income.wifeAllowance;
+}
+
+async function saveIncome(){
+  const button=event.currentTarget;
+  button.disabled=true;
+
+  try{
+    const values={
+      husbandSalary:Number(document.getElementById("husbandSalary").value),
+      husbandAllowance:Number(document.getElementById("husbandAllowance").value),
+      wifeSalary:Number(document.getElementById("wifeSalary").value),
+      wifeAllowance:Number(document.getElementById("wifeAllowance").value)
+    };
+
+    if(Object.values(values).some(v=>!Number.isFinite(v)||v<0)){
+      throw new Error("Nominal pemasukan tidak valid.");
+    }
+
+    data.income=values;
+    await saveToDrive();
+    render();
+    setStatus("Pemasukan berhasil disimpan.","success");
+
+  }catch(error){
+    setStatus("Gagal menyimpan: "+error.message,"error");
+  }finally{
+    button.disabled=false;
+  }
+}
+
+/* PENGELUARAN */
+async function addExpense(){
+  const button=event.currentTarget;
+  button.disabled=true;
+
+  const values={
+    date:document.getElementById("date").value,
+    category:document.getElementById("category").value,
+    amount:Number(document.getElementById("amount").value),
+    note:document.getElementById("note").value.trim()
+  };
+
+  if(!values.date||!values.category||!Number.isFinite(values.amount)||values.amount<=0){
+    alert("Lengkapi tanggal, jenis, dan nominal.");
+    button.disabled=false;
+    return;
+  }
+
+  try{
+    data.expenses.push({
+      id:crypto.randomUUID(),
+      ...values,
+      createdAt:new Date().toISOString()
+    });
+
+    await saveToDrive();
+
+    document.getElementById("amount").value="";
+    document.getElementById("note").value="";
+
+    render();
+    setStatus("Pengeluaran berhasil disimpan.","success");
+
+  }catch(error){
+    setStatus("Gagal menyimpan pengeluaran: "+error.message,"error");
+  }finally{
+    button.disabled=false;
+  }
+}
+
+/* KATEGORI */
+async function addCategory(){
+  const button=event.currentTarget;
+  button.disabled=true;
+
+  try{
+    const category=document.getElementById("newCategory").value.trim();
+
+    if(!category) throw new Error("Masukkan nama kategori.");
+
+    if(!data.categories.includes(category)){
+      data.categories.push(category);
+      await saveToDrive();
+    }
+
+    document.getElementById("newCategory").value="";
+    render();
+    setStatus("Kategori berhasil ditambahkan.","success");
+
+  }catch(error){
+    setStatus("Gagal menambah kategori: "+error.message,"error");
+  }finally{
+    button.disabled=false;
+  }
+}
+
+/* NAVIGASI */
+function showPage(id,btn){
+  document.querySelectorAll("#appArea>section").forEach(s=>s.classList.add("hidden"));
+  document.getElementById(id).classList.remove("hidden");
+
+  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+
+  render();
+}
+
+/* DASHBOARD DAN REKAP */
+function render(){
+  const income=Object.values(data.income).reduce((a,b)=>a+Number(b||0),0);
+  const month=currentMonth();
+
+  const expenses=data.expenses.filter(e=>String(e.date).startsWith(month));
+  const total=expenses.reduce((a,e)=>a+Number(e.amount),0);
+
+  document.getElementById("incomeTotal").textContent=rupiah(income);
+  document.getElementById("expenseTotal").textContent=rupiah(total);
+  document.getElementById("balance").textContent=rupiah(income-total);
+
+  document.getElementById("month").textContent=
+    new Date().toLocaleDateString("id-ID",{month:"long",year:"numeric"});
+
+  document.getElementById("category").innerHTML=
+    data.categories.map(c=>`<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join("");
+
+  document.getElementById("recent").innerHTML=
+    expenses.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5).map(e=>
+      `<div class="item">
+        <span>${escapeHTML(e.category)}<br><small>${escapeHTML(e.date)}</small></span>
+        <strong>${rupiah(e.amount)}</strong>
+      </div>`
+    ).join("")||"Belum ada transaksi.";
+
+  const summary={};
+
+  expenses.forEach(e=>{
+    summary[e.category]=(summary[e.category]||0)+Number(e.amount);
+  });
+
+  document.getElementById("categorySummary").innerHTML=
+    Object.entries(summary).map(([k,v])=>
+      `<div class="item"><span>${escapeHTML(k)}</span><strong>${rupiah(v)}</strong></div>`
+    ).join("")||"Belum ada transaksi.";
+
+  const selected=document.getElementById("reportMonth").value||month;
+  const report=data.expenses.filter(e=>String(e.date).startsWith(selected));
+  const groups={};
+
+  report.forEach(e=>{
+    groups[e.category]=(groups[e.category]||0)+Number(e.amount);
+  });
+
+  document.getElementById("reportList").innerHTML=
+    Object.entries(groups).map(([k,v])=>
+      `<div class="item"><span>${escapeHTML(k)}</span><strong>${rupiah(v)}</strong></div>`
+    ).join("")+
+    `<div class="item"><strong>Total</strong><strong>${rupiah(report.reduce((a,e)=>a+Number(e.amount),0))}</strong></div>`;
+}
+
+/* INISIALISASI */
+document.getElementById("date").value=localDate();
+document.getElementById("reportMonth").value=currentMonth();
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("./sw.js").catch(console.error);
+  });
+}
 </script>
 </body>
 </html>
