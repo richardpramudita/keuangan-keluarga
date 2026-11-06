@@ -678,7 +678,7 @@ function incomeForMonth(m){
 function getMonthExpenses(m){return data.expenses.filter(e=>String(e.date).startsWith(m))}
 function addLinkedExpense({sourceType,sourceId,date,category,amount,note}){
  const id=makeId();
- data.expenses.push({id,date,category,amount:Number(amount)||0,note,sourceType,sourceId,accountId:"",createdAt:new Date().toISOString()});
+ data.expenses.push({id,date,category,amount:Number(amount)||0,note,sourceType,sourceId,createdAt:new Date().toISOString()});
  return id;
 }
 function removeLinkedExpense(sourceType,sourceId,datePrefix){
@@ -733,41 +733,7 @@ async function uploadReceipt(file){
 }
 function receiptLink(id){return id?"https://drive.google.com/file/d/"+encodeURIComponent(id)+"/view":""}
 
-/* REKENING DAN SALDO */
-function accountBalance(id){
- const a=data.accounts.find(x=>x.id===id);if(!a)return 0;
- let bal=Number(a.opening)||0;
- data.accountTransactions.filter(t=>t.accountId===id).forEach(t=>bal+=(t.direction==="in"?1:-1)*(Number(t.amount)||0));
- return bal;
-}
-function accountOptions(selected=""){
- const html=data.accounts.map(a=>`<option value="${escapeHTML(a.id)}">${escapeHTML(a.name)}</option>`).join("");
- ["expenseAccount","transferFrom","transferTo"].forEach(id=>{if($(id))$(id).innerHTML=html||'<option value="">Belum ada rekening</option>'});
- if(selected&&$("expenseAccount"))$("expenseAccount").value=selected;
-}
-async function addAccount(event){
- const b=event.currentTarget;b.disabled=true;const old=cloneData();
- try{
-  const name=$("accountName").value.trim(),opening=Number($("accountOpening").value)||0;
-  if(!name)throw new Error("Isi nama rekening.");
-  if(opening<0)throw new Error("Saldo awal tidak boleh negatif.");
-  if(data.accounts.some(a=>a.name.toLowerCase()===name.toLowerCase()))throw new Error("Nama rekening sudah ada.");
-  data.accounts.push({id:makeId(),name,opening,createdAt:new Date().toISOString()});
-  await saveToDrive();$("accountName").value="";$("accountOpening").value="0";renderAll();setStatus("Rekening berhasil ditambahkan.","success");
- }catch(e){data=old;setStatus(e.message,"error")}finally{b.disabled=false}
-}
-async function transferAccount(event){
- const b=event.currentTarget;b.disabled=true;const old=cloneData();
- try{
-  const from=$("transferFrom").value,to=$("transferTo").value,n=Number($("transferAmount").value);
-  if(!from||!to||from===to||!Number.isFinite(n)||n<=0)throw new Error("Pilih dua rekening berbeda dan nominal yang benar.");
-  if(accountBalance(from)<n)throw new Error("Saldo rekening asal tidak mencukupi.");
-  const id=makeId(),time=new Date().toISOString();
-  data.accountTransactions.push({id,accountId:from,direction:"out",amount:n,type:"transfer",transferId:id,date:dateNow(),createdAt:time});
-  data.accountTransactions.push({id:makeId(),accountId:to,direction:"in",amount:n,type:"transfer",transferId:id,date:dateNow(),createdAt:time});
-  await saveToDrive();$("transferAmount").value="";renderAll();setStatus("Mutasi rekening berhasil.","success");
- }catch(e){data=old;setStatus(e.message,"error")}finally{b.disabled=false}
-}
+/* Fitur sub-rekening tidak digunakan dan telah dihapus. */
 
   /* TRANSAKSI PENGELUARAN */
 function fillExpenseCategories(selected=""){
@@ -820,7 +786,6 @@ async function deleteExpense(id){
  if(!confirm("Hapus transaksi "+rupiah(e.amount)+"?"))return;
  const old=cloneData();
  data.expenses=data.expenses.filter(x=>x.id!==id);
- data.accountTransactions=data.accountTransactions.filter(t=>t.expenseId!==id);
  try{await saveToDrive();renderAll();setStatus("Transaksi dihapus.","success")}
  catch(err){data=old;renderAll();setStatus(err.message,"error")}
 }
@@ -864,13 +829,6 @@ function renderTransactions(){
  list=list.filter(x=>(x.category+" "+(x.note||"")).toLowerCase().includes(q));
  list.sort((a,b)=>b.date.localeCompare(a.date));
  $("transactionList").innerHTML=list.map(e=>`<div class="item"><div class="item-main"><strong>${escapeHTML(e.category)}</strong><div class="muted">${escapeHTML(e.date)} · ${escapeHTML(e.note||"Tanpa keterangan")}</div><strong>${rupiah(e.amount)}</strong>${e.receiptId?`<div><a target="_blank" rel="noopener" href="${receiptLink(e.receiptId)}">Lihat bukti transaksi</a></div>`:""}</div><div class="item-actions">${e.kind!=="income"?`<button class="secondary small" onclick="editExpense('${e.id}')">Edit</button><button class="danger small" onclick="deleteExpense('${e.id}')">Hapus</button>`:"<span class='pill'>Pemasukan</span>"}</div></div>`).join("")||'<div class="empty">Tidak ada transaksi yang cocok.</div>';
-}
-
-/* REKENING */
-function renderAccounts(){
- accountOptions();
- $("accountList").innerHTML=data.accounts.map(a=>`
- <div class="item"><div class="item-main"><strong>${escapeHTML(a.name)}</strong><div class="muted">Saldo awal ${rupiah(a.opening)}</div></div><strong>${rupiah(accountBalance(a.id))}</strong></div>`).join("")||'<div class="empty">Belum ada rekening. Tambahkan rekening terlebih dahulu.</div>';
 }
 
 /* TAGIHAN RUTIN */
@@ -991,9 +949,7 @@ function renderDashboard(){
  $("incomeTotal").textContent=rupiah(income);$("expenseTotal").textContent=rupiah(expense);
  $("balance").textContent=rupiah(income-expense);
  $("dashboardSummary").innerHTML=`
- <div class="grid2"><div class="box"><div class="muted">Pemasukan</div><strong>${rupiah(income)}</strong></div>
- <div class="box"><div class="muted">Pengeluaran</div><strong>${rupiah(expense)}</strong></div>
- <div class="box"><div class="muted">Anggaran (sisa dana tersedia)</div><strong>${rupiah(budget-expense)}</strong><div class="muted">Total alokasi seluruh kategori dikurangi seluruh pengeluaran, tagihan, utang, dan tabungan yang tercatat.</div></div>
+ <div class="grid2"><div class="box"><div class="muted">Anggaran (sisa dana tersedia)</div><strong>${rupiah(budget-expense)}</strong><div class="muted">Total alokasi seluruh kategori dikurangi seluruh pengeluaran, tagihan, utang, dan tabungan yang tercatat.</div></div>
  <div class="box"><div class="muted">Sisa Saldo</div><strong>${rupiah(income-expense)}</strong><div class="muted">Total pemasukan dikurangi seluruh pengeluaran.</div></div></div>`;
  const alerts=[];
  getAllCategories().forEach(c=>{
@@ -1033,10 +989,9 @@ function renderReports(){
 }
 function csvCell(v){return '"'+String(v??"").replace(/"/g,'""')+'"'}
 function exportCSV(){
- const rows=[["Tanggal","Jenis","Kategori","Nominal","Keterangan","Rekening","ID Bukti"]];
+ const rows=[["Tanggal","Jenis","Kategori","Nominal","Keterangan","ID Bukti"]];
  data.expenses.forEach(e=>{
-  const acc=data.accounts.find(a=>a.id===e.accountId);
-  rows.push([e.date,"Pengeluaran",e.category,e.amount,e.note,acc?.name||"",e.receiptId||""]);
+  rows.push([e.date,"Pengeluaran",e.category,e.amount,e.note,e.receiptId||""]);
  });
  data.incomeHistory.forEach(x=>{
   const amount=["husbandSalary","husbandAllowance","wifeSalary","wifeAllowance","other"].reduce((s,k)=>s+(Number(x[k])||0),0);
