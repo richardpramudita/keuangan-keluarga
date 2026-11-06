@@ -106,7 +106,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 
 
 <section class="balance">
-<small>Saldo bersih keluarga bulan ini</small>
+<small>Sisa Saldo bulan ini</small>
 <h1 id="balance">Rp0</h1>
 <div class="stats">
 <div class="stat"><small>↑ Pemasukan</small><strong id="incomeTotal">Rp0</strong></div>
@@ -119,7 +119,6 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 <button data-page="income" onclick="showPage('income',this)">Pemasukan</button>
 <button data-page="expense" onclick="showPage('expense',this)">Transaksi</button>
 <button data-page="budget" onclick="showPage('budget',this)">Anggaran</button>
-<button data-page="accounts" onclick="showPage('accounts',this)">Rekening</button>
 <button data-page="bills" onclick="showPage('bills',this)">Tagihan</button>
 <button data-page="goals" onclick="showPage('goals',this)">Tabungan</button>
 <button data-page="debts" onclick="showPage('debts',this)">Utang</button>
@@ -165,7 +164,6 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 <label for="expenseCategory">Kategori</label><select id="expenseCategory"></select>
 <label for="expenseAmount">Nominal (Rp)</label><input type="number" id="expenseAmount" min="1" step="1">
 <label for="expenseNote">Keterangan</label><input id="expenseNote" maxlength="180">
-<label for="expenseAccount">Sumber dana / rekening</label><select id="expenseAccount"></select>
 <label for="receiptFile">Foto bukti transaksi (opsional)</label><input type="file" id="receiptFile" accept="image/jpeg,image/png,image/webp">
 <div class="muted">Foto disimpan terpisah di folder Google Drive “Bukti Transaksi”. Maksimal 5 MB.</div>
 <button id="saveExpenseButton" class="primary" onclick="saveExpense(event)">Simpan Pengeluaran</button>
@@ -196,23 +194,6 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 <button class="primary" onclick="saveBudget(event)">Simpan Anggaran</button>
 </div>
 <div class="card"><h3>📊 Pemakaian Anggaran</h3><div id="budgetOverview"></div></div>
-</section>
-
-<section id="accounts" class="hidden">
-<div class="card">
-<h3>🏦 Rekening dan Dompet</h3>
-<label for="accountName">Nama rekening</label><input id="accountName" placeholder="Tunai, BRI, BCA, GoPay...">
-<label for="accountOpening">Saldo awal (Rp)</label><input id="accountOpening" type="number" min="0" value="0">
-<button class="primary" onclick="addAccount(event)">Tambah Rekening</button>
-</div>
-<div class="card"><h3>Saldo Rekening</h3><div id="accountList"></div></div>
-<div class="card">
-<h3>↔️ Mutasi Antar Rekening</h3>
-<label for="transferFrom">Dari rekening</label><select id="transferFrom"></select>
-<label for="transferTo">Ke rekening</label><select id="transferTo"></select>
-<label for="transferAmount">Nominal</label><input id="transferAmount" type="number" min="1">
-<button class="primary" onclick="transferAccount(event)">Pindahkan Dana</button>
-</div>
 </section>
 
 <section id="bills" class="hidden">
@@ -792,7 +773,6 @@ async function transferAccount(event){
 function fillExpenseCategories(selected=""){
  $("expenseCategory").innerHTML=getAllCategories().map(c=>`<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join("");
  if(selected)$("expenseCategory").value=selected;
- accountOptions();
 }
 function clearExpenseForm(){
  editingExpenseId=null;
@@ -807,7 +787,7 @@ async function saveExpense(event){
  try{
   const date=$("expenseDate").value,category=$("expenseCategory").value;
   const amount=Number($("expenseAmount").value),note=$("expenseNote").value.trim();
-  const accountId=$("expenseAccount").value,file=$("receiptFile").files[0];
+  const file=$("receiptFile").files[0];
   if(!date||!category||!Number.isFinite(amount)||amount<=0)throw new Error("Lengkapi tanggal, kategori, dan nominal.");
   let receipt=null;
   if(file)receipt=await uploadReceipt(file);
@@ -815,12 +795,11 @@ async function saveExpense(event){
    const idx=data.expenses.findIndex(e=>e.id===editingExpenseId);
    if(idx<0)throw new Error("Transaksi yang diedit tidak ditemukan.");
    const prev=data.expenses[idx];
-   data.expenses[idx]={...prev,date,category,amount,note,accountId:accountId||prev.accountId||""};
+   data.expenses[idx]={...prev,date,category,amount,note};
    if(receipt)data.expenses[idx]={...data.expenses[idx],receiptId:receipt.id,receiptName:receipt.name};
   }else{
    const id=makeId();
-   data.expenses.push({id,date,category,amount,note,accountId:accountId||"",receiptId:receipt?.id||"",receiptName:receipt?.name||"",createdAt:new Date().toISOString()});
-   if(accountId)data.accountTransactions.push({id:makeId(),accountId,direction:"out",amount,type:"expense",expenseId:id,date,createdAt:new Date().toISOString()});
+   data.expenses.push({id,date,category,amount,note,receiptId:receipt?.id||"",receiptName:receipt?.name||"",createdAt:new Date().toISOString()});
   }
   await saveToDrive();clearExpenseForm();renderAll();
   setStatus(wasEditing?"Pengeluaran diperbarui.":"Pengeluaran berhasil disimpan.","success");
@@ -831,7 +810,6 @@ function editExpense(id){
  const e=data.expenses.find(x=>x.id===id);if(!e)return;
  editingExpenseId=id;$("expenseDate").value=e.date;fillExpenseCategories(e.category);
  $("expenseAmount").value=e.amount;$("expenseNote").value=e.note||"";
- $("expenseAccount").value=e.accountId||"";
  $("expenseFormTitle").textContent="✏️ Edit Pengeluaran";
  $("saveExpenseButton").textContent="Simpan Perubahan";
  $("cancelExpenseButton").classList.remove("hidden");
@@ -1015,8 +993,8 @@ function renderDashboard(){
  $("dashboardSummary").innerHTML=`
  <div class="grid2"><div class="box"><div class="muted">Pemasukan</div><strong>${rupiah(income)}</strong></div>
  <div class="box"><div class="muted">Pengeluaran</div><strong>${rupiah(expense)}</strong></div>
- <div class="box"><div class="muted">Anggaran</div><strong>${rupiah(budget)}</strong></div>
- <div class="box"><div class="muted">Sisa anggaran</div><strong>${rupiah(budget-expense)}</strong></div></div>`;
+ <div class="box"><div class="muted">Anggaran (sisa dana tersedia)</div><strong>${rupiah(budget-expense)}</strong><div class="muted">Total alokasi seluruh kategori dikurangi seluruh pengeluaran, tagihan, utang, dan tabungan yang tercatat.</div></div>
+ <div class="box"><div class="muted">Sisa Saldo</div><strong>${rupiah(income-expense)}</strong><div class="muted">Total pemasukan dikurangi seluruh pengeluaran.</div></div></div>`;
  const alerts=[];
  getAllCategories().forEach(c=>{
   const b=Number((data.budgets[m]||{})[c])||0,used=getCategoryExpense(m,c);
@@ -1096,7 +1074,7 @@ function renderAll(){
     Pertahankan pilihan aktif saat halaman dirender ulang. */
  fillExpenseCategories($("expenseCategory").value);
  renderDashboard();renderBudget();renderTransactions();renderCategoryList();
- renderAccounts();renderBills();renderUpcomingBills();renderGoals();renderDebts();renderReports();
+ renderBills();renderUpcomingBills();renderGoals();renderDebts();renderReports();
 }
 $("incomeMonth").addEventListener("change",fillIncomeForm);
 $("expenseDate").addEventListener("change",()=>{});
