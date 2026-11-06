@@ -106,7 +106,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 
 
 <section class="balance">
-<small>Sisa Saldo bulan ini</small>
+<small>Sisa Saldo tersedia</small>
 <h1 id="balance">Rp0</h1>
 <div class="stats">
 <div class="stat"><small>↑ Pemasukan</small><strong id="incomeTotal">Rp0</strong></div>
@@ -688,8 +688,23 @@ function getExpenseTotal(m){return getMonthExpenses(m).reduce((s,e)=>s+(Number(e
 function getAllCategories(){return [...new Set([...data.categories,...data.expenses.map(e=>e.category)])]}
 function getCategoryExpense(m,c){return getMonthExpenses(m).filter(e=>e.category===c).reduce((s,e)=>s+(Number(e.amount)||0),0)}
 function getBudgetTotal(m){return getAllCategories().reduce((s,c)=>s+(Number((data.budgets[m]||{})[c])||0),0)}
-// Anggaran terpakai adalah ringkasan/pembatas transaksi yang sudah tercatat,
-// bukan pengeluaran kedua; menjumlahkannya lagi akan menggandakan saldo terpotong.
+// Kewajiban yang belum dialokasikan/dilunasi untuk menghitung saldo tersedia.
+function getUnpaidBillTotal(m){
+ return data.bills.filter(b=>b.active!==false&&!(Array.isArray(b.paidMonths)&&b.paidMonths.includes(m)))
+  .reduce((s,b)=>s+(Number(b.amount)||0),0);
+}
+function getRemainingDebtTotal(){
+ return data.debts.filter(d=>d.type==="payable")
+  .reduce((s,d)=>s+Math.max(0,(Number(d.amount)||0)-(Number(d.paid)||0)),0);
+}
+function getRemainingSavingsTotal(){
+ return data.savingsGoals.reduce((s,g)=>s+Math.max(0,(Number(g.target)||0)-(Number(g.saved)||0)),0);
+}
+function getAvailableBalance(m,income){
+ // Pengeluaran yang sudah tercatat tidak dikurangkan lagi di sini: alokasi
+ // anggaran, tagihan belum lunas, sisa utang, dan target tabungan dihitung terpisah.
+ return income-getBudgetTotal(m)-getUnpaidBillTotal(m)-getRemainingDebtTotal()-getRemainingSavingsTotal();
+}
 function makeBar(label,budget,spent){
  budget=Number(budget)||0;spent=Number(spent)||0;
  const pct=budget>0?spent/budget*100:0;
@@ -947,10 +962,12 @@ function renderDebts(){
 function renderDashboard(){
  const m=$("dashMonth").value||monthNow(),income=incomeForMonth(m),expense=getExpenseTotal(m),budget=getBudgetTotal(m);
  $("incomeTotal").textContent=rupiah(income);$("expenseTotal").textContent=rupiah(expense);
- $("balance").textContent=rupiah(income-expense);
+ const availableBalance=getAvailableBalance(m,income);
+ $("balance").textContent=rupiah(availableBalance);
+ const unpaidBills=getUnpaidBillTotal(m),remainingDebt=getRemainingDebtTotal(),remainingSavings=getRemainingSavingsTotal();
  $("dashboardSummary").innerHTML=`
- <div class="grid2"><div class="box"><div class="muted">Anggaran (sisa dana tersedia)</div><strong>${rupiah(budget-expense)}</strong><div class="muted">Total alokasi seluruh kategori dikurangi seluruh pengeluaran, tagihan, utang, dan tabungan yang tercatat.</div></div>
- <div class="box"><div class="muted">Sisa Saldo</div><strong>${rupiah(income-expense)}</strong><div class="muted">Total pemasukan dikurangi seluruh pengeluaran.</div></div></div>`;
+ <div class="grid2"><div class="box"><div class="muted">Anggaran (sisa dana tersedia)</div><strong>${rupiah(budget-expense)}</strong><div class="muted">Total anggaran kategori dikurangi pengeluaran yang tercatat.</div></div>
+ <div class="box"><div class="muted">Sisa Saldo</div><strong>${rupiah(availableBalance)}</strong><div class="muted">Pemasukan dikurangi anggaran kategori (${rupiah(budget)}), tagihan belum lunas (${rupiah(unpaidBills)}), sisa utang (${rupiah(remainingDebt)}), dan sisa target tabungan (${rupiah(remainingSavings)}).</div></div></div>`;
  const alerts=[];
  getAllCategories().forEach(c=>{
   const b=Number((data.budgets[m]||{})[c])||0,used=getCategoryExpense(m,c);
