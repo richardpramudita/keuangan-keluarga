@@ -80,10 +80,21 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 
 <div id="appArea" class="hidden">
 <div class="card top-actions no-print">
-<div><strong id="accountLabel">Google Drive terhubung</strong><div class="muted">Data pribadi Anda</div></div>
+<div><strong id="accountLabel">Google Drive terhubung</strong><div class="muted">Data keluarga bersama</div></div>
 <button class="secondary small" onclick="logoutGoogle()">Keluar</button>
 </div>
 <div id="appStatus" class="status">Terhubung.</div>
+<section class="card no-print" id="familySharingCard">
+<h3>👨‍👩‍👧 Akses akun istri</h3>
+<p class="muted">Bagikan folder data keluarga ke akun Google istri. Setelah menerima undangan, istri membuka tautan aplikasi bersama di perangkatnya dan masuk dengan akun Google yang diundang.</p>
+<label for="wifeGoogleEmail">Email Google istri</label>
+<input type="email" id="wifeGoogleEmail" value="oktawidiarini@gmail.com" placeholder="nama@gmail.com" autocomplete="email">
+<button class="primary" id="shareWifeButton" onclick="shareFolderWithWife(event)">Bagikan akses edit ke istri</button>
+<label for="familyShareLink">Tautan aplikasi untuk istri</label>
+<input id="familyShareLink" readonly placeholder="Tautan muncul setelah akses dibagikan">
+<button class="secondary primary" type="button" onclick="copyFamilyShareLink()">Salin tautan aplikasi</button>
+<p class="muted">Akun istri mendapat akses Editor ke folder data keluarga. Jangan bagikan tautan ini kepada orang lain.</p>
+</section>
 
 <section class="balance">
 <small>Saldo bersih keluarga bulan ini</small>
@@ -280,6 +291,17 @@ const DEFAULT_CATEGORIES=["Belanja dapur","Transportasi","Listrik","Air","Pendid
 
 let accessToken=null,tokenClient=null,driveFolderId=null,dataFileId=null,receiptFolderId=null,editingExpenseId=null;
 let data=emptyData();
+let lastDriveModifiedTime=null,isSaving=false,syncTimer=null;
+function sharedFamilyConfig(){
+ try{const p=new URLSearchParams(location.hash.replace(/^#/ ,""));const raw=p.get("family");if(!raw)return null;const x=JSON.parse(raw);return x&&x.folderId&&x.dataFileId?x:null}catch(e){return null}
+}
+function makeFamilyShareUrl(){
+ const u=new URL(location.href);u.hash="family="+encodeURIComponent(JSON.stringify({folderId:driveFolderId,dataFileId,receiptFolderId:receiptFolderId||""}));return u.href
+}
+async function copyFamilyShareLink(){
+ const v=$("familyShareLink").value;if(!v){setStatus("Bagikan akses ke istri terlebih dahulu.","error");return}
+ try{await navigator.clipboard.writeText(v);setStatus("Tautan aplikasi berhasil disalin. Kirimkan kepada istri.","success")}catch(e){$("familyShareLink").focus();$("familyShareLink").select();setStatus("Pilih dan salin tautan aplikasi secara manual.","error")}
+}
 const $=id=>document.getElementById(id);
 const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n)||0);
 const cloneData=()=>JSON.parse(JSON.stringify(data));
@@ -337,11 +359,36 @@ async function createDriveFolder(name,parent=null){
  const r=await driveRequest("https://www.googleapis.com/drive/v3/files",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(meta)});
  return r.id;
 }
+/* Bagikan folder utama dan buat tautan yang membawa ID folder/file bersama. */
+async function shareFolderWithWife(event){
+ const b=event.currentTarget,email=$("wifeGoogleEmail").value.trim().toLowerCase();
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){setStatus("Masukkan alamat email Google istri yang valid.","error");return}
+ if(!accessToken||!driveFolderId||!dataFileId){setStatus("Hubungkan Google Drive pemilik data terlebih dahulu.","error");return}
+ if(!confirm("Berikan akses Editor ke "+email+" untuk folder Keuangan Keluarga beserta isinya?"))return;
+ b.disabled=true;
+ try{
+  const url="https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(driveFolderId)+"/permissions?fields=permissions(id,role,emailAddress)";
+  const r=await driveRequest(url);
+  const permission=(r.permissions||[]).find(x=>(x.emailAddress||"").toLowerCase()===email);
+  if(!permission){await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(driveFolderId)+"/permissions?sendNotificationEmail=true&fields=id,role,emailAddress",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"user",role:"writer",emailAddress:email})});}
+  else if(permission.role!=="writer"){await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(driveFolderId)+"/permissions/"+encodeURIComponent(permission.id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({role:"writer"})});}
+  $("familyShareLink").value=makeFamilyShareUrl();
+  setStatus("Akses Editor dibagikan kepada "+email+". Minta istri menerima undangan Drive, lalu buka tautan aplikasi di atas dan masuk dengan akun tersebut.","success");
+ }catch(e){setStatus("Gagal membagikan folder: "+e.message+". Periksa izin berbagi Google Drive.","error")}
+ finally{b.disabled=false}
+}
+
 async function uploadDataFile(){
  if(!dataFileId)throw new Error("File data belum tersedia.");
- await driveRequest("https://www.googleapis.com/upload/drive/v3/files/"+dataFileId+"?uploadType=media",{
+ if(lastDriveModifiedTime){
+  const current=await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(dataFileId)+"?fields=id,modifiedTime");
+  if(current.modifiedTime&&current.modifiedTime!==lastDriveModifiedTime)throw new Error("Data Drive berubah dari perangkat lain. Muat ulang aplikasi sebelum menyimpan agar catatan terbaru tidak tertimpa.");
+ }
+ await driveRequest("https://www.googleapis.com/upload/drive/v3/files/"+encodeURIComponent(dataFileId)+"?uploadType=media",{
   method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(data,null,2)
  });
+ const updated=await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(dataFileId)+"?fields=id,modifiedTime");
+ lastDriveModifiedTime=updated.modifiedTime||lastDriveModifiedTime;
 }
 async function createDataFile(){
  const r=await driveRequest("https://www.googleapis.com/drive/v3/files",{
@@ -351,7 +398,9 @@ async function createDataFile(){
  dataFileId=r.id;await uploadDataFile();
 }
 async function downloadDataFile(){
- const r=await fetch("https://www.googleapis.com/drive/v3/files/"+dataFileId+"?alt=media",{headers:{Authorization:"Bearer "+accessToken}});
+ const meta=await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(dataFileId)+"?fields=id,modifiedTime");
+ lastDriveModifiedTime=meta.modifiedTime||null;
+ const r=await fetch("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(dataFileId)+"?alt=media",{headers:{Authorization:"Bearer "+accessToken}});
  const body=await r.text();
  if(!r.ok)throw new Error("Gagal membaca data Drive: "+body);
  let parsed;try{parsed=JSON.parse(body)}catch(e){throw new Error("Isi data-keuangan.json bukan JSON yang valid. Data tidak ditimpa.")};
@@ -360,23 +409,45 @@ async function downloadDataFile(){
 }
 async function saveToDrive(){
  if(!accessToken||!dataFileId)throw new Error("Google Drive belum terhubung.");
- data.schemaVersion=3;
- await uploadDataFile();
+ data.schemaVersion=3;isSaving=true;
+ try{await uploadDataFile()}finally{isSaving=false}
+}
+async function refreshFamilyData(){
+ if(!accessToken||!dataFileId||isSaving)return;
+ try{
+  const meta=await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(dataFileId)+"?fields=id,modifiedTime");
+  if(meta.modifiedTime&&lastDriveModifiedTime&&meta.modifiedTime!==lastDriveModifiedTime){
+   await downloadDataFile();renderAll();setStatus("Data terbaru dari perangkat keluarga lain berhasil disinkronkan.","success");
+  }
+ }catch(e){console.warn("Sinkronisasi otomatis:",e.message)}
 }
 async function initializeApp(){
  try{
   setLoginStatus("Membuka Google Drive...");
-  const folder=await findDriveFile(FOLDER_NAME,"application/vnd.google-apps.folder");
-  driveFolderId=folder?folder.id:await createDriveFolder(FOLDER_NAME);
-  const file=await findDriveFile(DATA_FILE_NAME,"application/json",driveFolderId);
-  if(file){dataFileId=file.id;await downloadDataFile()}
-  else{data=emptyData();normalizeData();await createDataFile()}
-  const receiptFolder=await findDriveFile(RECEIPT_FOLDER_NAME,"application/vnd.google-apps.folder",driveFolderId);
-  receiptFolderId=receiptFolder?receiptFolder.id:await createDriveFolder(RECEIPT_FOLDER_NAME,driveFolderId);
+  const shared=sharedFamilyConfig();
+  if(shared){
+   /* Tautan istri memakai ID folder/file milik suami; jangan pernah membuat Drive baru bila akses gagal. */
+   driveFolderId=shared.folderId;dataFileId=shared.dataFileId;receiptFolderId=shared.receiptFolderId||null;
+   await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(driveFolderId)+"?fields=id,name,mimeType");
+   await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(dataFileId)+"?fields=id,name,mimeType");
+   await downloadDataFile();
+   if(receiptFolderId)await driveRequest("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(receiptFolderId)+"?fields=id,name,mimeType");
+  }else{
+   const folder=await findDriveFile(FOLDER_NAME,"application/vnd.google-apps.folder");
+   driveFolderId=folder?folder.id:await createDriveFolder(FOLDER_NAME);
+   const file=await findDriveFile(DATA_FILE_NAME,"application/json",driveFolderId);
+   if(file){dataFileId=file.id;await downloadDataFile()}
+   else{data=emptyData();normalizeData();await createDataFile()}
+   const receiptFolder=await findDriveFile(RECEIPT_FOLDER_NAME,"application/vnd.google-apps.folder",driveFolderId);
+   receiptFolderId=receiptFolder?receiptFolder.id:await createDriveFolder(RECEIPT_FOLDER_NAME,driveFolderId);
+  }
   $("loginCard").classList.add("hidden");$("appArea").classList.remove("hidden");
-  $("accountLabel").textContent="Google Drive terhubung";
-  setInitialDates();fillIncomeForm();renderAll();setStatus("Google Drive berhasil terhubung.","success");
- }catch(e){setLoginStatus("Gagal menghubungkan Drive: "+e.message,"error");$("loginButton").disabled=false}
+  $("accountLabel").textContent=shared?"Google Drive keluarga bersama":"Google Drive terhubung";
+  if(!shared&&$("familyShareLink"))$("familyShareLink").value="";
+  setInitialDates();fillIncomeForm();renderAll();
+  if(syncTimer)clearInterval(syncTimer);syncTimer=setInterval(refreshFamilyData,20000);
+  setStatus(shared?"Data keluarga bersama berhasil dibuka. Sinkronisasi otomatis aktif.":"Google Drive berhasil terhubung.","success");
+ }catch(e){setLoginStatus("Gagal menghubungkan Drive: "+e.message+(sharedFamilyConfig()?" Pastikan undangan sudah diterima dan buka tautan dari pemilik data. Aplikasi tidak membuat folder baru agar data tidak terpisah.":""),"error");$("loginButton").disabled=false}
 }
 
 /* MIGRASI: FIELD LAMA TETAP DIPERTAHANKAN */
